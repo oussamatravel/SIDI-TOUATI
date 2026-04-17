@@ -73,7 +73,8 @@ function App() {
     surah: '',
     fromAyah: '',
     toAyah: '',
-    status: 'good' // good, review, weak
+    status: 'good', // good, review, weak
+    isFullSurah: false
   });
 
   const [selectedParentStudent, setSelectedParentStudent] = useState(null);
@@ -223,11 +224,15 @@ function App() {
     
     try {
       await addDoc(collection(db, "memorization"), {
-        ...newMemo,
+        studentId: newMemo.studentId,
+        surah: newMemo.surah,
+        fromAyah: Number(newMemo.fromAyah),
+        toAyah: Number(newMemo.toAyah),
+        status: newMemo.status,
         teacherId: user.uid,
         date: new Date().toISOString()
       });
-      setNewMemo({ studentId: '', surah: '', fromAyah: '', toAyah: '', status: 'good' });
+      setNewMemo({ studentId: '', surah: '', fromAyah: '', toAyah: '', status: 'good', isFullSurah: false });
       alert("تم حفظ سجل التسميع بنجاح");
     } catch (error) {
       console.error("Memo Error:", error);
@@ -771,13 +776,41 @@ function App() {
                       <select 
                         required
                         value={newMemo.surah}
-                        onChange={e => setNewMemo({...newMemo, surah: e.target.value})}
+                        onChange={e => {
+                          const surahName = e.target.value;
+                          const surahData = QURAN_DATA.find(s => s.name === surahName);
+                          setNewMemo({
+                            ...newMemo, 
+                            surah: surahName,
+                            fromAyah: newMemo.isFullSurah ? '1' : newMemo.fromAyah,
+                            toAyah: newMemo.isFullSurah && surahData ? surahData.ayahs.toString() : newMemo.toAyah
+                          });
+                        }}
                         className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"
                       >
                          <option value="">-- اختر السورة --</option>
                          {SURAH_LIST.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                    </div>
+                    <div className="flex items-center gap-2 py-1">
+                       <input 
+                         type="checkbox" 
+                         id="fullSurah" 
+                         checked={newMemo.isFullSurah}
+                         onChange={(e) => {
+                           const checked = e.target.checked;
+                           const surahData = QURAN_DATA.find(s => s.name === newMemo.surah);
+                           setNewMemo(prev => ({
+                             ...prev,
+                             isFullSurah: checked,
+                             fromAyah: checked ? '1' : prev.fromAyah,
+                             toAyah: (checked && surahData) ? surahData.ayahs.toString() : prev.toAyah
+                           }));
+                         }}
+                         className="w-4 h-4 text-primary rounded focus:ring-primary cursor-pointer"
+                       />
+                       <label htmlFor="fullSurah" className="text-sm font-bold text-primary cursor-pointer select-none">تسميع السورة كاملة</label>
+                    </div>
                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                          <label className="text-sm">من آية</label>
