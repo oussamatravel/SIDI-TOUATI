@@ -85,33 +85,54 @@ function App() {
   useEffect(() => {
     if (!user) return;
 
-    let q = query(collection(db, "students"), orderBy("name"));
+    let q = query(collection(db, "students"));
     // If not admin, only show teacher's students
     if (role !== 'admin') {
-      q = query(collection(db, "students"), where("teacherId", "==", user.uid), orderBy("name"));
+      q = query(collection(db, "students"), where("teacherId", "==", user.uid));
     }
 
     const unsubscribeSt = onSnapshot(q, (snapshot) => {
-      setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort in memory to avoid needing a composite index
+      setStudents(data.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+    }, (error) => {
+      console.error("Students Sync Error:", error);
     });
 
     const today = format(new Date(), 'yyyy-MM-dd');
     let qAtt = query(collection(db, "attendance"), where("date", "==", today));
-    if (role !== 'admin') {
-      qAtt = query(collection(db, "attendance"), where("date", "==", today), where("teacherId", "==", user.uid));
-    }
-
+    // We don't filter teacherId in query to avoid index requirement
+    
     const unsubscribeAtt = onSnapshot(qAtt, (snapshot) => {
-      setAttendance(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (role !== 'admin') {
+        const filtered = data.filter(a => a.teacherId === user.uid);
+        setAttendance(filtered);
+      } else {
+        setAttendance(data);
+      }
+    }, (error) => {
+      console.error("Attendance Sync Error:", error);
     });
 
     // Fetch memorization records
-    let qMem = query(collection(db, "memorization"), orderBy("date", "desc"));
+    let qMem = query(collection(db, "memorization"));
     if (role !== 'admin') {
-      qMem = query(collection(db, "memorization"), where("teacherId", "==", user.uid), orderBy("date", "desc"));
+      qMem = query(collection(db, "memorization"), where("teacherId", "==", user.uid));
+    } else {
+      qMem = query(collection(db, "memorization"), orderBy("date", "desc"));
     }
+
     const unsubscribeMem = onSnapshot(qMem, (snapshot) => {
-      setMemorization(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort in memory if filtered to avoid index requirement
+      if (role !== 'admin') {
+         setMemorization(data.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
+      } else {
+         setMemorization(data);
+      }
+    }, (error) => {
+      console.error("Memorization Sync Error:", error);
     });
 
     // Fetch all teachers if admin
