@@ -7,7 +7,8 @@ import {
   UserCircle,
   Menu,
   X,
-  Shield
+  Shield,
+  RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -20,6 +21,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     { id: 'students', label: 'الطلاب', icon: Users },
     { id: 'attendance', label: 'التحضير', icon: CalendarCheck },
     { id: 'memorization', label: 'التسميع', icon: BookOpen },
+    { id: 'review', label: 'المراجعة', icon: RefreshCw },
     { id: 'parents', label: 'بوابة الوالدين', icon: UserCircle },
   ];
 
