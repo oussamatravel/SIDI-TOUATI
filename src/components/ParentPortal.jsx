@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { UserCircle, LogOut } from 'lucide-react';
+import { UserCircle, LogOut, Calendar } from 'lucide-react';
 
 function ParentPortal({ studentCode, onLogout }) {
   const [student, setStudent] = useState(null);
