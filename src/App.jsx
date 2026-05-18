@@ -20,7 +20,8 @@ import {
   BarChart2,
   ChevronLeft,
   RefreshCw,
-  UserCircle
+  UserCircle,
+  Download
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
 import { db, auth as primaryAuth, firebaseConfig } from './firebase';
@@ -419,6 +420,29 @@ function App() {
     if (window.confirm("هل أنت متأكد من حذف هذا الطالب؟")) {
       await deleteDoc(doc(db, "students", id));
     }
+  };
+
+  const handleExportData = () => {
+    // Collect all data into a single object
+    const exportData = {
+      timestamp: new Date().toISOString(),
+      students,
+      teachers,
+      attendance: rawAttendance,
+      memorization: rawMemorization,
+      reviews: rawReviews
+    };
+
+    // Convert to JSON string
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+    
+    // Create a virtual link and trigger download
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `quran_backup_${format(new Date(), 'yyyy-MM-dd')}.json`);
+    document.body.appendChild(downloadAnchorNode); // required for firefox
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
   };
 
   const calculateStudentProgress = (studentId) => {
@@ -1644,6 +1668,15 @@ function App() {
                 <p className="text-xs opacity-60">إجمالي المعلمين</p>
                 <p className="text-xl font-bold">{teachers.length}</p>
              </div>
+          </div>
+          <div className="mt-6 flex justify-end">
+             <button 
+                onClick={handleExportData}
+                className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold px-6 py-3 rounded-lg transition-colors text-sm shadow-lg"
+             >
+                <Download size={18} />
+                تحميل نسخة احتياطية (Backup)
+             </button>
           </div>
        </div>
 
