@@ -17,13 +17,18 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Fetch user role from Firestore
-        const userDoc = await getDoc(doc(db, 'teachers', firebaseUser.uid));
-        if (userDoc.exists()) {
-          setRole(userDoc.data().role);
-          setUser({ uid: firebaseUser.uid, ...userDoc.data() });
-        } else {
-          // Fallback or setup for new user (default to teacher if not found)
+        try {
+          // Fetch user role from Firestore
+          const userDoc = await getDoc(doc(db, 'teachers', firebaseUser.uid));
+          if (userDoc.exists()) {
+            setRole(userDoc.data().role);
+            setUser({ uid: firebaseUser.uid, ...userDoc.data() });
+          } else {
+            setRole('teacher');
+            setUser(firebaseUser);
+          }
+        } catch (error) {
+          console.error("AuthContext Firestore Error:", error);
           setRole('teacher');
           setUser(firebaseUser);
         }
