@@ -746,8 +746,10 @@ function App() {
         </div>
         <div className="card border-r-4 border-r-yellow-500 flex items-center justify-between">
           <div>
-            <p className="text-gray-500 text-sm">الإحصائيات</p>
-            <h3 className="text-3xl font-bold">--</h3>
+            <p className="text-gray-500 text-sm">تسميعات اليوم</p>
+            <h3 className="text-3xl font-bold">
+              {memorization.filter(m => m.date && m.date.startsWith(format(new Date(), 'yyyy-MM-dd'))).length}
+            </h3>
           </div>
           <div className="p-3 bg-yellow-100 text-yellow-500 rounded-full">
             <TrendingUp size={24} />
