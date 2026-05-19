@@ -44,12 +44,17 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import ParentPortal from './components/ParentPortal';
 
+export const SCHOOL_BRANCHES = ['Ecole Edimco', 'Ecole Ighil Elbordj', 'Ecole Ritaj'];
+
 function App() {
   const { user, role, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [unauthParentCode, setUnauthParentCode] = useState(null);
+  const [rawStudents, setRawStudents] = useState([]);
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [rawTeachers, setRawTeachers] = useState([]);
+  const [adminBranchFilter, setAdminBranchFilter] = useState('All');
   const [rawAttendance, setRawAttendance] = useState([]);
   const [rawMemorization, setRawMemorization] = useState([]);
   const [rawReviews, setRawReviews] = useState([]);
@@ -74,7 +79,8 @@ function App() {
   const [newTeacher, setNewTeacher] = useState({
     name: '',
     email: '',
-    password: ''
+    password: '',
+    branch: SCHOOL_BRANCHES[0]
   });
 
   const [newMemo, setNewMemo] = useState({
@@ -119,8 +125,8 @@ function App() {
 
     const unsubscribeSt = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Sort in memory to avoid needing a composite index
-      setStudents(data.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+      const sortedData = data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setRawStudents(sortedData);
     }, (error) => {
       console.error("Students Sync Error:", error);
     });
@@ -158,7 +164,7 @@ function App() {
     if (role === 'admin') {
       const qT = query(collection(db, "teachers"), orderBy("name"));
       unsubscribeTeach = onSnapshot(qT, (snapshot) => {
-        setTeachers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setRawTeachers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       });
     }
 
@@ -176,12 +182,30 @@ function App() {
   useEffect(() => {
     if (!user) return;
     
+    let currentStudents = rawStudents;
+    
     if (role === 'admin') {
-      setAttendance(rawAttendance);
-      setMemorization([...rawMemorization].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
-      setReviews([...rawReviews].sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0)));
+      if (adminBranchFilter !== 'All') {
+        currentStudents = rawStudents.filter(s => s.branch === adminBranchFilter);
+        setTeachers(rawTeachers.filter(t => t.branch === adminBranchFilter));
+      } else {
+        setTeachers(rawTeachers);
+      }
+      setStudents(currentStudents);
+
+      if (adminBranchFilter !== 'All') {
+        const branchStudentIds = currentStudents.map(s => s.id);
+        setAttendance(rawAttendance.filter(a => branchStudentIds.includes(a.studentId)));
+        setMemorization([...rawMemorization.filter(m => branchStudentIds.includes(m.studentId))].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
+        setReviews([...rawReviews.filter(r => branchStudentIds.includes(r.studentId))].sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0)));
+      } else {
+        setAttendance(rawAttendance);
+        setMemorization([...rawMemorization].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
+        setReviews([...rawReviews].sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0)));
+      }
     } else {
-      const myStudentIds = students.map(s => s.id);
+      setStudents(currentStudents); // For teachers, it's already filtered by teacherId in Firestore query
+      const myStudentIds = currentStudents.map(s => s.id);
       
       const filteredAtt = rawAttendance.filter(a => a.teacherId === user.uid || myStudentIds.includes(a.studentId));
       setAttendance(filteredAtt);
@@ -196,7 +220,7 @@ function App() {
         .sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0));
       setReviews(filteredRev);
     }
-  }, [rawAttendance, rawMemorization, rawReviews, students, role, user]);
+  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, role, user, adminBranchFilter]);
 
   if (!user && !unauthParentCode) {
     return <Login onParentLogin={setUnauthParentCode} />;
@@ -210,10 +234,14 @@ function App() {
   const handleAddStudent = async (e) => {
     e.preventDefault();
     try {
+      const selectedTeacher = role === 'admin' ? teachers.find(t => t.id === newStudent.teacherId) : null;
+      const assignedBranch = selectedTeacher ? selectedTeacher.branch : (user.branch || SCHOOL_BRANCHES[0]);
+
       const studentData = {
         ...newStudent,
         // If admin, use the selected teacherId from form, else use own uid
         teacherId: (role === 'admin' && newStudent.teacherId) ? newStudent.teacherId : user.uid,
+        branch: assignedBranch,
         updatedAt: new Date().toISOString()
       };
 
@@ -366,13 +394,14 @@ function App() {
         name: newTeacher.name,
         email: newTeacher.email,
         role: 'teacher',
+        branch: newTeacher.branch,
         createdAt: new Date().toISOString()
       });
 
       // Cleanup secondary app
       await deleteApp(secondaryApp);
       
-      setNewTeacher({ name: '', email: '', password: '' });
+      setNewTeacher({ name: '', email: '', password: '', branch: SCHOOL_BRANCHES[0] });
       alert("تم إضافة المعلم بنجاح");
     } catch (error) {
       console.error("Teacher Creation Error:", error);
@@ -1653,6 +1682,21 @@ function App() {
 
   const renderAdmin = () => (
     <div className="space-y-8">
+       {/* Branch Filter */}
+       <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border">
+          <h3 className="font-bold text-gray-700">تصفية حسب المدرسة:</h3>
+          <select 
+             value={adminBranchFilter}
+             onChange={(e) => setAdminBranchFilter(e.target.value)}
+             className="px-4 py-2 border rounded-xl bg-gray-50 focus:ring-2 focus:ring-primary outline-none"
+          >
+             <option value="All">جميع المدارس</option>
+             {SCHOOL_BRANCHES.map(branch => (
+               <option key={branch} value={branch}>{branch}</option>
+             ))}
+          </select>
+       </div>
+
        <div className="card bg-gray-900 text-white p-8 rounded-2xl">
           <div className="flex items-center gap-4 mb-4">
              <Shield size={40} className="text-yellow-500" />
@@ -1712,6 +1756,18 @@ function App() {
                       />
                    </div>
                    <div className="space-y-1">
+                      <label className="text-sm font-medium">المدرسة (الفرع)</label>
+                      <select
+                        value={newTeacher.branch}
+                        onChange={e => setNewTeacher({...newTeacher, branch: e.target.value})}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
+                      >
+                        {SCHOOL_BRANCHES.map(branch => (
+                          <option key={branch} value={branch}>{branch}</option>
+                        ))}
+                      </select>
+                   </div>
+                   <div className="space-y-1">
                       <label className="text-sm font-medium">كلمة المرور (مؤقتة)</label>
                       <input 
                         required 
@@ -1744,6 +1800,7 @@ function App() {
                          <tr className="text-gray-400 text-sm border-b">
                             <th className="pb-4 pr-2">المعلم</th>
                             <th className="pb-4 pr-2">الإيميل</th>
+                            <th className="pb-4 pr-2">المدرسة</th>
                             <th className="pb-4 pr-2">تاريخ الانضمام</th>
                             <th className="pb-4 pr-2">الإجراءات</th>
                          </tr>
@@ -1760,6 +1817,7 @@ function App() {
                                  </div>
                               </td>
                               <td className="py-4 pr-2 text-xs text-gray-500 font-mono">{t.email}</td>
+                              <td className="py-4 pr-2 text-xs font-bold text-primary">{t.branch || 'Ecole Edimco'}</td>
                               <td className="py-4 pr-2 text-xs text-gray-400">
                                  {t.createdAt ? format(new Date(t.createdAt), 'yyyy/MM/dd') : '--'}
                               </td>
