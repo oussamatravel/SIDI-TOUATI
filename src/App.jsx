@@ -66,6 +66,7 @@ function App() {
   // Form States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [editingTeacher, setEditingTeacher] = useState(null);
   const [newStudent, setNewStudent] = useState({
     name: '',
     age: '',
@@ -372,40 +373,51 @@ function App() {
     }
   };
 
-  const handleAddTeacher = async (e) => {
+  const handleSaveTeacher = async (e) => {
     e.preventDefault();
-    if (!newTeacher.email || !newTeacher.password) return;
-
     try {
-      // Secondary App Trick: Create user without logging out the admin
-      const secondaryApp = initializeApp(firebaseConfig, "Secondary");
-      const secondaryAuth = getAuth(secondaryApp);
-      
-      const userCredential = await createUserWithEmailAndPassword(
-        secondaryAuth, 
-        newTeacher.email, 
-        newTeacher.password
-      );
-      
-      const teacherUid = userCredential.user.uid;
+      if (editingTeacher) {
+        // Update existing teacher
+        await updateDoc(doc(db, "teachers", editingTeacher), {
+          name: newTeacher.name,
+          branch: newTeacher.branch
+        });
+        alert("تم تحديث بيانات المعلم بنجاح");
+      } else {
+        // Add new teacher
+        if (!newTeacher.email || !newTeacher.password) return;
 
-      // Add to Firestore
-      await setDoc(doc(db, "teachers", teacherUid), {
-        name: newTeacher.name,
-        email: newTeacher.email,
-        role: 'teacher',
-        branch: newTeacher.branch,
-        createdAt: new Date().toISOString()
-      });
+        // Secondary App Trick: Create user without logging out the admin
+        const secondaryApp = initializeApp(firebaseConfig, "Secondary");
+        const secondaryAuth = getAuth(secondaryApp);
+        
+        const userCredential = await createUserWithEmailAndPassword(
+          secondaryAuth, 
+          newTeacher.email, 
+          newTeacher.password
+        );
+        
+        const teacherUid = userCredential.user.uid;
 
-      // Cleanup secondary app
-      await deleteApp(secondaryApp);
+        // Add to Firestore
+        await setDoc(doc(db, "teachers", teacherUid), {
+          name: newTeacher.name,
+          email: newTeacher.email,
+          role: 'teacher',
+          branch: newTeacher.branch,
+          createdAt: new Date().toISOString()
+        });
+
+        // Cleanup secondary app
+        await deleteApp(secondaryApp);
+        alert("تم إضافة المعلم بنجاح");
+      }
       
+      setEditingTeacher(null);
       setNewTeacher({ name: '', email: '', password: '', branch: SCHOOL_BRANCHES[0] });
-      alert("تم إضافة المعلم بنجاح");
     } catch (error) {
-      console.error("Teacher Creation Error:", error);
-      alert("خطأ في إضافة المعلم: " + error.message);
+      console.error("Teacher Saving Error:", error);
+      alert("خطأ: " + error.message);
     }
   };
 
@@ -1730,10 +1742,13 @@ function App() {
           <div className="xl:col-span-1">
              <div className="card sticky top-6">
                 <h4 className="font-bold border-b pb-4 mb-4 flex items-center gap-2">
-                   <Plus size={20} className="text-primary" />
-                   إضافة معلم جديد
+                   {editingTeacher ? (
+                      <><Edit2 size={20} className="text-primary" /> تعديل بيانات المعلم</>
+                   ) : (
+                      <><Plus size={20} className="text-primary" /> إضافة معلم جديد</>
+                   )}
                 </h4>
-                <form onSubmit={handleAddTeacher} className="space-y-4">
+                <form onSubmit={handleSaveTeacher} className="space-y-4">
                    <div className="space-y-1">
                       <label className="text-sm font-medium">اسم المعلم</label>
                       <input 
@@ -1742,17 +1757,6 @@ function App() {
                         onChange={e => setNewTeacher({...newTeacher, name: e.target.value})}
                         className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
                         placeholder="الاسم الكامل"
-                      />
-                   </div>
-                   <div className="space-y-1">
-                      <label className="text-sm font-medium">البريد الإلكتروني</label>
-                      <input 
-                        required 
-                        type="email"
-                        value={newTeacher.email}
-                        onChange={e => setNewTeacher({...newTeacher, email: e.target.value})}
-                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none text-left"
-                        placeholder="teacher@example.com"
                       />
                    </div>
                    <div className="space-y-1">
@@ -1767,23 +1771,52 @@ function App() {
                         ))}
                       </select>
                    </div>
-                   <div className="space-y-1">
-                      <label className="text-sm font-medium">كلمة المرور (مؤقتة)</label>
-                      <input 
-                        required 
-                        type="password"
-                        value={newTeacher.password}
-                        onChange={e => setNewTeacher({...newTeacher, password: e.target.value})}
-                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none text-left"
-                        placeholder="••••••••"
-                      />
-                   </div>
+                   {!editingTeacher && (
+                     <>
+                       <div className="space-y-1">
+                          <label className="text-sm font-medium">البريد الإلكتروني</label>
+                          <input 
+                            required 
+                            type="email"
+                            value={newTeacher.email}
+                            onChange={e => setNewTeacher({...newTeacher, email: e.target.value})}
+                            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none text-left"
+                            placeholder="teacher@example.com"
+                          />
+                       </div>
+                       <div className="space-y-1">
+                          <label className="text-sm font-medium">كلمة المرور (مؤقتة)</label>
+                          <input 
+                            required 
+                            type="password"
+                            value={newTeacher.password}
+                            onChange={e => setNewTeacher({...newTeacher, password: e.target.value})}
+                            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none text-left"
+                            placeholder="••••••••"
+                          />
+                       </div>
+                     </>
+                   )}
                    <button type="submit" className="btn-primary w-full py-3 mt-4 text-sm font-bold">
-                      إنشاء حساب المعلم
+                      {editingTeacher ? 'حفظ التعديلات' : 'إنشاء حساب المعلم'}
                    </button>
-                   <p className="text-[10px] text-gray-400 text-center leading-relaxed">
-                      * سيتم إنشاء الحساب في Firebase Auth وإضافته لقاعدة البيانات كمعلم.
-                   </p>
+                   {editingTeacher && (
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setEditingTeacher(null);
+                          setNewTeacher({ name: '', email: '', password: '', branch: SCHOOL_BRANCHES[0] });
+                        }} 
+                        className="w-full py-2 mt-2 text-sm font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                      >
+                         إلغاء التعديل
+                      </button>
+                   )}
+                   {!editingTeacher && (
+                     <p className="text-[10px] text-gray-400 text-center leading-relaxed mt-2">
+                        * سيتم إنشاء الحساب في Firebase Auth وإضافته لقاعدة البيانات كمعلم.
+                     </p>
+                   )}
                 </form>
              </div>
           </div>
@@ -1821,7 +1854,19 @@ function App() {
                               <td className="py-4 pr-2 text-xs text-gray-400">
                                  {t.createdAt ? format(new Date(t.createdAt), 'yyyy/MM/dd') : '--'}
                               </td>
-                              <td className="py-4 pr-2">
+                              <td className="py-4 pr-2 flex gap-2">
+                                 <button 
+                                    onClick={() => {
+                                      setEditingTeacher(t.id);
+                                      setNewTeacher({ name: t.name, email: t.email, branch: t.branch || SCHOOL_BRANCHES[0], password: '' });
+                                      // Scroll to top where the form is
+                                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                    title="تعديل المعلم"
+                                 >
+                                    <Edit2 size={18} />
+                                 </button>
                                  <button 
                                     onClick={() => handleDeleteTeacher(t.id)}
                                     className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
