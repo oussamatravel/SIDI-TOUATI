@@ -55,7 +55,6 @@ function App() {
   const [teachers, setTeachers] = useState([]);
   const [rawTeachers, setRawTeachers] = useState([]);
   const [adminBranchFilter, setAdminBranchFilter] = useState('All');
-  const [adminTeacherFilter, setAdminTeacherFilter] = useState('All');
   const [rawAttendance, setRawAttendance] = useState([]);
   const [rawMemorization, setRawMemorization] = useState([]);
   const [rawReviews, setRawReviews] = useState([]);
@@ -63,6 +62,11 @@ function App() {
   const [memorization, setMemorization] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Filters for Students Tab
+  const [studentSearch, setStudentSearch] = useState('');
+  const [studentTabBranchFilter, setStudentTabBranchFilter] = useState('All');
+  const [studentTabTeacherFilter, setStudentTabTeacherFilter] = useState('All');
 
   // Form States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -188,19 +192,14 @@ function App() {
     
     if (role === 'admin') {
       if (adminBranchFilter !== 'All') {
-        currentStudents = currentStudents.filter(s => s.branch === adminBranchFilter);
+        currentStudents = rawStudents.filter(s => s.branch === adminBranchFilter);
         setTeachers(rawTeachers.filter(t => t.branch === adminBranchFilter));
       } else {
         setTeachers(rawTeachers);
       }
-      
-      if (adminTeacherFilter !== 'All') {
-        currentStudents = currentStudents.filter(s => s.teacherId === adminTeacherFilter);
-      }
-      
       setStudents(currentStudents);
 
-      if (adminBranchFilter !== 'All' || adminTeacherFilter !== 'All') {
+      if (adminBranchFilter !== 'All') {
         const branchStudentIds = currentStudents.map(s => s.id);
         setAttendance(rawAttendance.filter(a => branchStudentIds.includes(a.studentId)));
         setMemorization([...rawMemorization.filter(m => branchStudentIds.includes(m.studentId))].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
@@ -227,7 +226,7 @@ function App() {
         .sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0));
       setReviews(filteredRev);
     }
-  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, role, user, adminBranchFilter, adminTeacherFilter]);
+  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, role, user, adminBranchFilter]);
 
   if (!user && !unauthParentCode) {
     return <Login onParentLogin={setUnauthParentCode} />;
@@ -841,35 +840,44 @@ function App() {
   const renderStudents = () => (
     selectedStudentForDetails ? renderStudentDetails(selectedStudentForDetails) : (
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex flex-col sm:flex-row items-center gap-2 w-full">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+          <div className="flex flex-wrap w-full lg:w-auto gap-2">
             <div className="relative w-full sm:w-64">
               <Search className="absolute right-3 top-2.5 text-gray-400" size={18} />
               <input 
                 type="text" 
-                placeholder="بحث عن طالب..." 
+                value={studentSearch}
+                onChange={(e) => setStudentSearch(e.target.value)}
+                placeholder="بحث عن طالب (الاسم أو الكود)..." 
                 className="w-full pr-10 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
               />
             </div>
+            
             {role === 'admin' && (
               <>
                 <select 
-                  value={adminBranchFilter}
-                  onChange={(e) => { setAdminBranchFilter(e.target.value); setAdminTeacherFilter('All'); }}
-                  className="px-4 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-primary outline-none text-sm"
+                  value={studentTabBranchFilter}
+                  onChange={(e) => {
+                    setStudentTabBranchFilter(e.target.value);
+                    setStudentTabTeacherFilter('All'); // Reset teacher filter when branch changes
+                  }}
+                  className="px-4 py-2 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-primary outline-none text-sm"
                 >
                   <option value="All">جميع المدارس</option>
                   {SCHOOL_BRANCHES.map(branch => (
                     <option key={branch} value={branch}>{branch}</option>
                   ))}
                 </select>
+
                 <select 
-                  value={adminTeacherFilter}
-                  onChange={(e) => setAdminTeacherFilter(e.target.value)}
-                  className="px-4 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-primary outline-none text-sm"
+                  value={studentTabTeacherFilter}
+                  onChange={(e) => setStudentTabTeacherFilter(e.target.value)}
+                  className="px-4 py-2 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-primary outline-none text-sm"
                 >
                   <option value="All">جميع المعلمين</option>
-                  {teachers.map(t => (
+                  {rawTeachers
+                    .filter(t => studentTabBranchFilter === 'All' || t.branch === studentTabBranchFilter)
+                    .map(t => (
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
                 </select>
@@ -889,7 +897,14 @@ function App() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {students.map(student => {
+          {rawStudents
+            .filter(s => role !== 'admin' || studentTabBranchFilter === 'All' || s.branch === studentTabBranchFilter)
+            .filter(s => role !== 'admin' || studentTabTeacherFilter === 'All' || s.teacherId === studentTabTeacherFilter)
+            .filter(s => 
+              s.name.includes(studentSearch) || 
+              (s.code && s.code.includes(studentSearch))
+            )
+            .map(student => {
             const prog = calculateStudentProgress(student.id);
             return (
               <div key={student.id} className="card hover:border-primary transition-colors group">
@@ -916,12 +931,6 @@ function App() {
                   <p>ولي الأمر: {student.parentName}</p>
                   <p>الهاتف: {student.phone}</p>
                   <p className="text-xs text-primary font-medium">الأحزاب المحفوظة: {prog.totalHizbs}</p>
-                  {role === 'admin' && (
-                    <div className="mt-2 pt-2 border-t text-xs">
-                      <p><span className="font-bold">المدرسة:</span> {student.branch || '--'}</p>
-                      <p><span className="font-bold">المعلم:</span> {teachers.find(t => t.id === student.teacherId)?.name || '--'}</p>
-                    </div>
-                  )}
                 </div>
                 
                 <div className="flex flex-col gap-2 pt-4 border-t">
