@@ -248,7 +248,7 @@ function App() {
         ...newStudent,
         // If admin, use the selected teacherId from form, else use own uid
         teacherId: (role === 'admin' && newStudent.teacherId) ? newStudent.teacherId : user.uid,
-        branch: role === 'admin' ? newStudent.branch : (user.branch || SCHOOL_BRANCHES[0]),
+        branch: newStudent.branch || SCHOOL_BRANCHES[0],
         updatedAt: new Date().toISOString()
       };
 
@@ -268,7 +268,7 @@ function App() {
         name: '', 
         age: '', 
         level: 'ابتدائي',
-        branch: SCHOOL_BRANCHES[0],
+        branch: user?.branch || SCHOOL_BRANCHES[0],
         parentName: '', 
         parentEmail: '',
         phone: '', 
@@ -901,6 +901,18 @@ function App() {
           <button 
             onClick={() => {
               setEditingStudent(null);
+              setNewStudent({
+                name: '',
+                age: '',
+                level: 'ابتدائي',
+                branch: user?.branch || SCHOOL_BRANCHES[0],
+                parentName: '',
+                parentEmail: '',
+                phone: '',
+                notes: '',
+                teacherId: '',
+                code: Math.random().toString(36).substring(2, 8).toUpperCase() 
+              });
               setIsModalOpen(true);
             }}
             className="btn-primary w-full sm:w-auto"
@@ -1067,37 +1079,35 @@ function App() {
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none" 
                   />
                 </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-blue-600">المدرسة (المركز)</label>
+                  <select 
+                    required
+                    value={newStudent.branch || SCHOOL_BRANCHES[0]}
+                    onChange={e => setNewStudent({...newStudent, branch: e.target.value, teacherId: role === 'admin' ? '' : newStudent.teacherId})}
+                    className="w-full px-4 py-2 border-2 border-blue-100 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-blue-50"
+                  >
+                    {SCHOOL_BRANCHES.map(branch => (
+                      <option key={branch} value={branch}>{branch}</option>
+                    ))}
+                  </select>
+                </div>
                 {role === 'admin' && (
-                  <>
-                    <div className="space-y-1">
-                      <label className="text-sm font-medium text-blue-600">المدرسة (خاص بالمسؤول)</label>
-                      <select 
-                        required
-                        value={newStudent.branch || SCHOOL_BRANCHES[0]}
-                        onChange={e => setNewStudent({...newStudent, branch: e.target.value, teacherId: ''})}
-                        className="w-full px-4 py-2 border-2 border-blue-100 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-blue-50"
-                      >
-                        {SCHOOL_BRANCHES.map(branch => (
-                          <option key={branch} value={branch}>{branch}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-sm font-medium text-blue-600">تعيين لمعلم (خاص بالمسؤول)</label>
-                      <select 
-                        required
-                        value={newStudent.teacherId || ''}
-                        onChange={e => setNewStudent({...newStudent, teacherId: e.target.value})}
-                        className="w-full px-4 py-2 border-2 border-blue-100 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-blue-50"
-                      >
-                        <option value="">-- اختر المعلم المسجل --</option>
-                        <option value={user.uid}>أنا (المسؤول)</option>
-                        {rawTeachers.filter(t => t.branch === (newStudent.branch || SCHOOL_BRANCHES[0])).map(t => (
-                          <option key={t.id} value={t.id}>{t.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-blue-600">تعيين لمعلم (خاص بالمسؤول)</label>
+                    <select 
+                      required
+                      value={newStudent.teacherId || ''}
+                      onChange={e => setNewStudent({...newStudent, teacherId: e.target.value})}
+                      className="w-full px-4 py-2 border-2 border-blue-100 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-blue-50"
+                    >
+                      <option value="">-- اختر المعلم المسجل --</option>
+                      <option value={user.uid}>أنا (المسؤول)</option>
+                      {rawTeachers.filter(t => t.branch === (newStudent.branch || SCHOOL_BRANCHES[0])).map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 )}
                 <button type="submit" className="btn-primary w-full py-3 mt-4">
                   {editingStudent ? 'حفظ التعديلات' : 'إضافة الطالب'}
