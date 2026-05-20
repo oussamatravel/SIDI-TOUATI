@@ -45,6 +45,7 @@ import { ar } from 'date-fns/locale';
 import ParentPortal from './components/ParentPortal';
 
 export const SCHOOL_BRANCHES = ['Ecole Edimco', 'Ecole Ighil Elbordj', 'Ecole Ritaj'];
+export const STUDENT_LEVELS = ['تحضيري', 'ابتدائي', 'متوسط', 'كبار'];
 
 function App() {
   const { user, role, logout } = useAuth();
@@ -67,6 +68,7 @@ function App() {
   const [studentSearch, setStudentSearch] = useState('');
   const [studentTabBranchFilter, setStudentTabBranchFilter] = useState('All');
   const [studentTabTeacherFilter, setStudentTabTeacherFilter] = useState('All');
+  const [studentTabLevelFilter, setStudentTabLevelFilter] = useState('All');
 
   // Form States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -75,6 +77,7 @@ function App() {
   const [newStudent, setNewStudent] = useState({
     name: '',
     age: '',
+    level: 'ابتدائي',
     parentName: '',
     parentEmail: '',
     phone: '',
@@ -266,6 +269,7 @@ function App() {
       setNewStudent({ 
         name: '', 
         age: '', 
+        level: 'ابتدائي',
         parentName: '', 
         parentEmail: '',
         phone: '', 
@@ -883,6 +887,17 @@ function App() {
                 </select>
               </>
             )}
+            
+            <select 
+              value={studentTabLevelFilter}
+              onChange={(e) => setStudentTabLevelFilter(e.target.value)}
+              className="px-4 py-2 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-primary outline-none text-sm"
+            >
+              <option value="All">جميع المستويات</option>
+              {STUDENT_LEVELS.map(level => (
+                <option key={level} value={level}>{level}</option>
+              ))}
+            </select>
           </div>
           <button 
             onClick={() => {
@@ -900,6 +915,7 @@ function App() {
           {rawStudents
             .filter(s => role !== 'admin' || studentTabBranchFilter === 'All' || s.branch === studentTabBranchFilter)
             .filter(s => role !== 'admin' || studentTabTeacherFilter === 'All' || s.teacherId === studentTabTeacherFilter)
+            .filter(s => studentTabLevelFilter === 'All' || s.level === studentTabLevelFilter)
             .filter(s => 
               s.name.includes(studentSearch) || 
               (s.code && s.code.includes(studentSearch))
@@ -911,7 +927,10 @@ function App() {
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h4 className="font-bold text-lg">{student.name}</h4>
-                    <p className="text-sm text-gray-500">العمر: {student.age} سنة</p>
+                    <p className="text-sm text-gray-500">
+                      العمر: {student.age} سنة 
+                      {student.level && ` - ${student.level}`}
+                    </p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <div className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
@@ -1003,13 +1022,25 @@ function App() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-sm font-medium">كود الوالدين</label>
-                    <input 
-                      disabled
-                      value={newStudent.code}
-                      className="w-full px-4 py-2 border rounded-lg bg-gray-50 font-mono text-center" 
-                    />
+                    <label className="text-sm font-medium">المستوى</label>
+                    <select
+                      value={newStudent.level}
+                      onChange={e => setNewStudent({...newStudent, level: e.target.value})}
+                      className="w-full px-4 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-primary outline-none"
+                    >
+                      {STUDENT_LEVELS.map(level => (
+                        <option key={level} value={level}>{level}</option>
+                      ))}
+                    </select>
                   </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">كود الوالدين</label>
+                  <input 
+                    disabled
+                    value={newStudent.code}
+                    className="w-full px-4 py-2 border rounded-lg bg-gray-50 font-mono text-center" 
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium">اسم ولي الأمر</label>
