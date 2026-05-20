@@ -45,7 +45,7 @@ import { ar } from 'date-fns/locale';
 import ParentPortal from './components/ParentPortal';
 
 export const SCHOOL_BRANCHES = ['Ecole Edimco', 'Ecole Ighil Elbordj', 'Ecole Ritaj'];
-export const STUDENT_LEVELS = ['تحضيري', 'ابتدائي', 'متوسط', 'كبار'];
+export const STUDENT_LEVELS = ['تحضيري', 'ابتدائي', 'متوسط', 'ثانوي', 'كبار'];
 
 function App() {
   const { user, role, logout } = useAuth();
