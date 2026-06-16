@@ -135,8 +135,8 @@ function ParentPortal({ studentCode, onLogout }) {
                       r.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                    }`}>
                       {r.status === 'pending' ? 'قيد الانتظار' : 
-                       r.status === 'good' ? 'ممتاز' : 
-                       r.status === 'review' ? 'مراجعة' : 'ضعيف'}
+                       r.status === 'good' ? 'جيد' : 
+                       r.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
                    </div>
                 </div>
               ))}
@@ -165,7 +165,7 @@ function ParentPortal({ studentCode, onLogout }) {
                       m.status === 'good' ? 'bg-green-100 text-green-700' :
                       m.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                    }`}>
-                      {m.status === 'good' ? 'ممتاز' : m.status === 'review' ? 'مراجعة' : 'ضعيف'}
+                      {m.status === 'good' ? 'جيد' : m.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
                    </div>
                 </div>
               ))}

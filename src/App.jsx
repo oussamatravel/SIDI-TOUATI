@@ -101,7 +101,8 @@ function App() {
     status: 'good',
     isFullSurah: false,
     memoType: 'surah',
-    hizb: ''
+    hizb: '',
+    notes: ''
   });
 
   const [newReview, setNewReview] = useState({
@@ -122,6 +123,7 @@ function App() {
   const [selectedStudentForDetails, setSelectedStudentForDetails] = useState(null);
   const [reportFromDate, setReportFromDate] = useState('');
   const [reportToDate, setReportToDate] = useState('');
+  const [reviewNotes, setReviewNotes] = useState({});
 
   // Fetch Data
   useEffect(() => {
@@ -325,9 +327,10 @@ function App() {
         memoType: newMemo.memoType,
         status: newMemo.status,
         teacherId: user.uid,
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
+        notes: newMemo.notes || ''
       });
-      setNewMemo({ studentId: '', surah: '', fromAyah: '', toAyah: '', status: 'good', isFullSurah: false, memoType: 'surah', hizb: '' });
+      setNewMemo({ studentId: '', surah: '', fromAyah: '', toAyah: '', status: 'good', isFullSurah: false, memoType: 'surah', hizb: '', notes: '' });
       alert("تم حفظ سجل التسميع بنجاح");
     } catch (error) {
       console.error("Memo Error:", error);
@@ -364,7 +367,13 @@ function App() {
     try {
       await updateDoc(doc(db, "reviews", reviewId), {
         status: evaluationStatus,
-        completedDate: new Date().toISOString()
+        completedDate: new Date().toISOString(),
+        notes: reviewNotes[reviewId] || ''
+      });
+      setReviewNotes(prev => {
+        const updated = {...prev};
+        delete updated[reviewId];
+        return updated;
       });
     } catch (error) {
       console.error("Evaluate Review Error:", error);
@@ -716,7 +725,7 @@ function App() {
                          <div className="flex justify-between">
                             <span className="text-xs text-gray-500">{m.memoType==='hizb'||m.hizb ? '' : `الآيات: ${m.fromAyah} - ${m.toAyah}`}</span>
                             <span className={`text-[10px] px-2 py-0.5 rounded-full ${m.status==='good'?'bg-green-100 text-green-700':m.status==='review'?'bg-yellow-100 text-yellow-700':'bg-red-100 text-red-700'}`}>
-                               {m.status==='good'?'ممتاز':m.status==='review'?'مراجعة':'ضعيف'}
+                               {m.status==='good'?'جيد':m.status==='review'?'يحتاج الى ترسيخ':'حفظ غير متقن'}
                             </span>
                          </div>
                       </div>
@@ -730,7 +739,7 @@ function App() {
                          <div className="flex justify-between">
                             <span className="text-xs text-gray-500">{r.memoType==='hizb'||r.hizb ? '' : `الآيات: ${r.fromAyah} - ${r.toAyah}`}</span>
                             <span className={`text-[10px] px-2 py-0.5 rounded-full ${r.status==='pending'?'bg-gray-200 text-gray-700':r.status==='good'?'bg-green-100 text-green-700':r.status==='review'?'bg-yellow-100 text-yellow-700':'bg-red-100 text-red-700'}`}>
-                               {r.status==='pending'?'قيد الانتظار':r.status==='good'?'ممتاز':r.status==='review'?'مراجعة':'ضعيف'}
+                               {r.status==='pending'?'قيد الانتظار':r.status==='good'?'جيد':r.status==='review'?'يحتاج الى ترسيخ':'حفظ غير متقن'}
                             </span>
                          </div>
                       </div>
@@ -824,7 +833,7 @@ function App() {
                    memo.status === 'good' ? 'bg-green-100 text-green-700' :
                    memo.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                 }`}>
-                   {memo.status === 'good' ? 'ممتاز' : memo.status === 'review' ? 'مراجعة' : 'ضعيف'}
+                   {memo.status === 'good' ? 'جيد' : memo.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
                 </span>
                 <span className="text-[10px] text-gray-400 block mt-1">
                   {memo.date ? format(new Date(memo.date), 'HH:mm', { locale: ar }) : '--'}
@@ -1343,11 +1352,21 @@ function App() {
                                 ${stat === 'review' ? 'bg-yellow-50 text-yellow-700 peer-checked:bg-yellow-200' : ''}
                                 ${stat === 'weak' ? 'bg-red-50 text-red-700 peer-checked:bg-red-200' : ''}
                               `}>
-                                {stat === 'good' ? 'ممتاز' : stat === 'review' ? 'مراجعة' : 'ضعيف'}
+                                {stat === 'good' ? 'جيد' : stat === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
                               </div>
                            </label>
                          ))}
                       </div>
+                   </div>
+                   <div className="space-y-1">
+                      <label className="text-sm font-medium">ملاحظة (اختياري)</label>
+                      <input 
+                        type="text"
+                        value={newMemo.notes || ''}
+                        onChange={e => setNewMemo({...newMemo, notes: e.target.value})}
+                        className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"
+                        placeholder="اكتب ملاحظة حول مستوى الطالب..."
+                      />
                    </div>
                    <button type="submit" className="btn-primary w-full py-3 shadow-lg shadow-primary/20">حفظ السجل</button>
                 </form>
@@ -1378,6 +1397,11 @@ function App() {
                                   </>
                                )}
                             </p>
+                            {memo.notes && (
+                               <p className="text-xs text-gray-500 mt-1">
+                                  <span className="font-bold">ملاحظة:</span> {memo.notes}
+                               </p>
+                            )}
                          </div>
                          <div className="text-left text-[10px] text-gray-400">
                             {memo.date ? format(new Date(memo.date), 'dd/MM/yyyy HH:mm', { locale: ar }) : '--'}
@@ -1388,7 +1412,7 @@ function App() {
                             memo.status === 'good' ? 'bg-green-100 text-green-700' :
                             memo.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                          }`}>
-                            {memo.status === 'good' ? 'ممتاز' : memo.status === 'review' ? 'مراجعة' : 'ضعيف'}
+                            {memo.status === 'good' ? 'جيد' : memo.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
                          </div>
                          <button 
                            onClick={async () => {
@@ -1576,12 +1600,21 @@ function App() {
                               <Trash2 size={14} />
                            </button>
                         </div>
-                        <div className="pt-3 border-t flex flex-col sm:flex-row gap-2 justify-between items-center bg-orange-50/50 p-2 rounded-lg">
-                           <span className="text-xs text-orange-600 font-medium">قيّم المراجعة:</span>
-                           <div className="flex gap-2 w-full sm:w-auto">
-                              <button onClick={() => handleEvaluateReview(rev.id, 'good')} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-md bg-green-100 text-green-700 hover:bg-green-200 transition-colors">ممتاز</button>
-                              <button onClick={() => handleEvaluateReview(rev.id, 'review')} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-md bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-colors">مراجعة</button>
-                              <button onClick={() => handleEvaluateReview(rev.id, 'weak')} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-md bg-red-100 text-red-700 hover:bg-red-200 transition-colors">ضعيف</button>
+                        <div className="pt-3 border-t flex flex-col gap-2 bg-orange-50/50 p-2 rounded-lg">
+                           <input 
+                              type="text"
+                              placeholder="ملاحظة (اختياري)..."
+                              value={reviewNotes[rev.id] || ''}
+                              onChange={(e) => setReviewNotes({...reviewNotes, [rev.id]: e.target.value})}
+                              className="w-full px-2 py-1.5 text-xs border rounded outline-none focus:ring-1 focus:ring-primary bg-white"
+                           />
+                           <div className="flex flex-col sm:flex-row gap-2 justify-between items-center w-full">
+                              <span className="text-xs text-orange-600 font-medium">قيّم المراجعة:</span>
+                              <div className="flex gap-2 w-full sm:w-auto">
+                                 <button onClick={() => handleEvaluateReview(rev.id, 'good')} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-md bg-green-100 text-green-700 hover:bg-green-200 transition-colors">جيد</button>
+                                 <button onClick={() => handleEvaluateReview(rev.id, 'review')} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-md bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-colors">يحتاج الى ترسيخ</button>
+                                 <button onClick={() => handleEvaluateReview(rev.id, 'weak')} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-md bg-red-100 text-red-700 hover:bg-red-200 transition-colors">حفظ غير متقن</button>
+                              </div>
                            </div>
                         </div>
                      </div>
@@ -1617,6 +1650,11 @@ function App() {
                                     </>
                                  )}
                               </p>
+                              {rev.notes && (
+                                 <p className="text-xs text-gray-500 mt-1">
+                                    <span className="font-bold">ملاحظة:</span> {rev.notes}
+                                 </p>
+                              )}
                            </div>
                            <div className="text-left text-[10px] text-gray-400">
                               {rev.completedDate ? format(new Date(rev.completedDate), 'dd/MM/yyyy HH:mm', { locale: ar }) : '--'}
@@ -1627,7 +1665,7 @@ function App() {
                               rev.status === 'good' ? 'bg-green-100 text-green-700' :
                               rev.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                            }`}>
-                              {rev.status === 'good' ? 'ممتاز' : rev.status === 'review' ? 'مراجعة' : 'ضعيف'}
+                              {rev.status === 'good' ? 'جيد' : rev.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
                            </div>
                            <button onClick={() => handleDeleteReview(rev.id)} className="text-gray-300 hover:text-red-500 transition-colors">
                               <Trash2 size={14} />
@@ -1729,7 +1767,7 @@ function App() {
                           m.status === 'good' ? 'bg-green-100 text-green-700' :
                           m.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                        }`}>
-                          {m.status === 'good' ? 'ممتاز' : m.status === 'review' ? 'مراجعة' : 'ضعيف'}
+                          {m.status === 'good' ? 'جيد' : m.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
                        </div>
                     </div>
                   ))}
@@ -1758,8 +1796,8 @@ function App() {
                           r.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                        }`}>
                           {r.status === 'pending' ? 'قيد الانتظار' : 
-                           r.status === 'good' ? 'ممتاز' : 
-                           r.status === 'review' ? 'مراجعة' : 'ضعيف'}
+                           r.status === 'good' ? 'جيد' : 
+                           r.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
                        </div>
                     </div>
                   ))}
