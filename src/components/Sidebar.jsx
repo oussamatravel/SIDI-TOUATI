@@ -19,7 +19,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
   const menuItems = [
     { id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
     { id: 'students', label: 'الطلاب', icon: Users },
-    { id: 'attendance', label: 'التحضير', icon: CalendarCheck },
+    { id: 'attendance', label: 'الحضور', icon: CalendarCheck },
     { id: 'memorization', label: 'التسميع', icon: BookOpen },
     { id: 'review', label: 'المراجعة', icon: RefreshCw },
     { id: 'parents', label: 'بوابة الوالدين', icon: UserCircle },

@@ -1126,10 +1126,10 @@ function App() {
          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-dashed">
             <h3 className="text-xl font-bold flex items-center gap-2">
                <Calendar className="text-primary" size={24} />
-               تحضير الطلاب
+               حضور الطلاب
             </h3>
             <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl border shadow-sm">
-               <label className="text-sm font-bold text-gray-500">تاريخ التحضير:</label>
+               <label className="text-sm font-bold text-gray-500">تاريخ الحضور:</label>
                <input 
                  type="date" 
                  value={attendanceDate}
@@ -1199,7 +1199,7 @@ function App() {
               );
             })}
             {students.length === 0 && (
-              <div className="text-center py-10 text-gray-400">لا يوجد طلاب للتحضير</div>
+              <div className="text-center py-10 text-gray-400">لا يوجد طلاب للحضور</div>
             )}
          </div>
       </div>
