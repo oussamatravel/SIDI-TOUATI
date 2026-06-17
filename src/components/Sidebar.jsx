@@ -8,11 +8,12 @@ import {
   Menu,
   X,
   Shield,
-  RefreshCw
+  RefreshCw,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const Sidebar = ({ activeTab, setActiveTab }) => {
+const Sidebar = ({ activeTab, setActiveTab, unreadMessagesCount = 0 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { role } = useAuth();
 
@@ -22,6 +23,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     { id: 'attendance', label: 'الحضور', icon: CalendarCheck },
     { id: 'memorization', label: 'التسميع', icon: BookOpen },
     { id: 'review', label: 'المراجعة', icon: RefreshCw },
+    { id: 'messages', label: 'الرسائل', icon: MessageSquare },
     { id: 'parents', label: 'بوابة الوالدين', icon: UserCircle },
   ];
 
@@ -76,7 +78,12 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
                 `}
               >
                 <item.icon size={20} />
-                <span className="font-medium">{item.label}</span>
+                <span className="font-medium flex-1 text-right">{item.label}</span>
+                {item.id === 'messages' && unreadMessagesCount > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    {unreadMessagesCount}
+                  </span>
+                )}
               </button>
             ))}
           </nav>

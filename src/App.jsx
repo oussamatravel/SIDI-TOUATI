@@ -21,7 +21,10 @@ import {
   ChevronLeft,
   RefreshCw,
   UserCircle,
-  Download
+  Download,
+  MessageSquare,
+  Send,
+  MessageCircle
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
 import { db, auth as primaryAuth, firebaseConfig } from './firebase';
@@ -63,6 +66,13 @@ function App() {
   const [memorization, setMemorization] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Messages States
+  const [rawMessages, setRawMessages] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [selectedChatUser, setSelectedChatUser] = useState(null); // For Admin
+  const [messageSearch, setMessageSearch] = useState('');
 
   // Filters for Students Tab
   const [studentSearch, setStudentSearch] = useState('');
@@ -171,6 +181,15 @@ function App() {
       console.error("Reviews Sync Error:", error);
     });
 
+    // Fetch Messages
+    let qMsg = query(collection(db, "messages"), orderBy("timestamp", "asc"));
+    const unsubscribeMsg = onSnapshot(qMsg, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setRawMessages(data);
+    }, (error) => {
+      console.error("Messages Sync Error:", error);
+    });
+
     // Fetch all teachers if admin
     let unsubscribeTeach = () => {};
     if (role === 'admin') {
@@ -187,6 +206,7 @@ function App() {
       unsubscribeMem();
       unsubscribeRev();
       unsubscribeTeach();
+      unsubscribeMsg();
     };
   }, [user, role]);
 
@@ -232,7 +252,15 @@ function App() {
         .sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0));
       setReviews(filteredRev);
     }
-  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, role, user, adminBranchFilter]);
+
+    // Filter messages
+    if (role === 'admin') {
+      setMessages(rawMessages);
+    } else {
+      setMessages(rawMessages.filter(m => m.senderId === user.uid || m.receiverId === user.uid || m.receiverId === 'all'));
+    }
+
+  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, rawMessages, role, user, adminBranchFilter]);
 
   if (!user && !unauthParentCode) {
     return <Login onParentLogin={setUnauthParentCode} />;
@@ -243,6 +271,35 @@ function App() {
   }
 
   // Handlers
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
+
+    let receiver = 'admin';
+    if (role === 'admin') {
+      if (!selectedChatUser) {
+        alert("الرجاء تحديد مستلم");
+        return;
+      }
+      receiver = selectedChatUser;
+    }
+
+    try {
+      await addDoc(collection(db, "messages"), {
+        senderId: user.uid,
+        senderName: role === 'admin' ? 'الإدارة' : (user.email || 'معلم'),
+        receiverId: receiver,
+        content: newMessage,
+        timestamp: new Date().toISOString(),
+        readStatus: false
+      });
+      setNewMessage('');
+    } catch (error) {
+      console.error("Error sending message:", error);
+      alert("خطأ في إرسال الرسالة");
+    }
+  };
+
   const handleAddStudent = async (e) => {
     e.preventDefault();
     try {
@@ -577,6 +634,126 @@ function App() {
       totalAyahs: uniqueAyahsMapped.size,
       recordCount: studentMemos.length
     };
+  };
+
+  const renderMessages = () => {
+    const chatTeachers = [{ id: 'all', name: 'الجميع (إعلان)' }, ...teachers];
+    
+    let displayMessages = messages;
+    if (role === 'admin' && selectedChatUser) {
+      if (selectedChatUser === 'all') {
+        displayMessages = messages.filter(m => m.receiverId === 'all');
+      } else {
+        displayMessages = messages.filter(m => 
+          (m.senderId === selectedChatUser && m.receiverId === 'admin') || 
+          (m.senderId === user.uid && m.receiverId === selectedChatUser)
+        );
+      }
+    } else if (role !== 'admin') {
+      displayMessages = messages;
+    } else {
+      displayMessages = [];
+    }
+
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row overflow-hidden h-[calc(100vh-12rem)] animate-in fade-in duration-300">
+        {role === 'admin' && (
+          <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-l flex flex-col bg-gray-50/50">
+            <div className="p-4 border-b bg-white">
+              <h3 className="font-bold flex items-center gap-2 text-primary">
+                <MessageSquare size={20} />
+                المحادثات
+              </h3>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {chatTeachers.map(t => {
+                const hasUnread = messages.some(m => m.senderId === t.id && m.receiverId === 'admin' && m.readStatus === false);
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setSelectedChatUser(t.id)}
+                    className={`w-full text-right px-4 py-3 rounded-xl transition-colors ${selectedChatUser === t.id ? 'bg-primary text-white shadow-md' : 'hover:bg-white text-gray-700'}`}
+                  >
+                    <div className="font-semibold flex justify-end items-center gap-2">
+                      {hasUnread && <span className="w-2 h-2 rounded-full bg-red-500"></span>}
+                      {t.name}
+                    </div>
+                    {t.id !== 'all' && <div className="text-xs opacity-70">{t.branch}</div>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 flex flex-col bg-gray-50/30">
+          {(role !== 'admin' || selectedChatUser) ? (
+            <>
+              <div className="p-4 border-b bg-white flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                  {role === 'admin' ? (selectedChatUser === 'all' ? 'A' : chatTeachers.find(t=>t.id===selectedChatUser)?.name?.charAt(0)) : 'الإدارة'.charAt(0)}
+                </div>
+                <div>
+                  <h3 className="font-bold">
+                    {role === 'admin' ? (selectedChatUser === 'all' ? 'إعلان للجميع' : chatTeachers.find(t=>t.id===selectedChatUser)?.name) : 'الإدارة'}
+                  </h3>
+                  {role !== 'admin' && <span className="text-xs text-green-600">متصل</span>}
+                </div>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {displayMessages.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-gray-400">
+                    لا توجد رسائل سابقة
+                  </div>
+                ) : (
+                  displayMessages.map(msg => {
+                    const isMine = msg.senderId === user.uid;
+                    return (
+                      <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${isMine ? 'bg-primary text-white rounded-tr-sm' : 'bg-white border text-gray-800 rounded-tl-sm shadow-sm'}`}>
+                          {!isMine && msg.receiverId === 'all' && role !== 'admin' && (
+                            <div className="text-xs text-primary font-bold mb-1">الإدارة (إعلان)</div>
+                          )}
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                          <div className={`text-[10px] mt-1 ${isMine ? 'text-white/70' : 'text-gray-400'}`}>
+                            {new Date(msg.timestamp).toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="p-4 bg-white border-t">
+                <form onSubmit={handleSendMessage} className="flex gap-2">
+                  <input 
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="اكتب رسالتك هنا..."
+                    className="flex-1 px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all"
+                  />
+                  <button 
+                    type="submit"
+                    disabled={!newMessage.trim()}
+                    className="p-3 bg-primary text-white rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  >
+                    <Send size={20} className="rtl:-scale-x-100" />
+                  </button>
+                </form>
+              </div>
+            </>
+          ) : (
+            <div className="h-full flex items-center justify-center text-gray-400 flex-col gap-3">
+              <MessageCircle size={48} className="opacity-20" />
+              <p>اختر محادثة للبدء</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // Render Screens
@@ -2040,15 +2217,39 @@ function App() {
       case 'attendance': return renderAttendance();
       case 'memorization': return renderMemorization();
       case 'review': return renderReview();
+      case 'messages': return renderMessages();
       case 'parents': return renderParents();
       case 'admin': return role === 'admin' ? renderAdmin() : renderDashboard();
       default: return renderDashboard();
     }
   };
 
+  // Messages Unread Logic
+  const unreadMessagesCount = messages.filter(m => m.readStatus === false && (role === 'admin' ? m.receiverId === 'admin' : (m.receiverId === user?.uid || m.receiverId === 'all'))).length;
+
+  useEffect(() => {
+    if (activeTab === 'messages' && user) {
+      const unread = messages.filter(m => 
+        m.readStatus === false && 
+        (role === 'admin' 
+          ? (m.receiverId === 'admin' && m.senderId === selectedChatUser) 
+          : (m.receiverId === user.uid || m.receiverId === 'all')
+        )
+      );
+      
+      unread.forEach(async (msg) => {
+        try {
+          await updateDoc(doc(db, "messages", msg.id), { readStatus: true });
+        } catch (error) {
+          console.error("Error marking read:", error);
+        }
+      });
+    }
+  }, [activeTab, messages, selectedChatUser, role, user]);
+
   return (
     <div className="flex flex-col lg:flex-row min-h-screen">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} unreadMessagesCount={unreadMessagesCount} />
       
       <main className="flex-1 p-4 lg:p-8 overflow-hidden">
         <header className="mb-8 flex justify-between items-center lg:items-start">
@@ -2059,6 +2260,7 @@ function App() {
               {activeTab === 'attendance' && 'سجل الحضور'}
               {activeTab === 'memorization' && 'متابعة الحفظ'}
               {activeTab === 'review' && 'المراجعة'}
+              {activeTab === 'messages' && 'الرسائل والملاحظات'}
               {activeTab === 'parents' && 'بوابة الوالدين'}
               {activeTab === 'admin' && 'لوحة الإدارة'}
             </h2>
