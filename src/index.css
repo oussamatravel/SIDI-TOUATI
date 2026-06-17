@@ -43,3 +43,26 @@ body {
 .rtl-flip {
   transform: scaleX(-1);
 }
+
+@media print {
+  body {
+    background-color: white !important;
+  }
+  .no-print, aside, header {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .card {
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    margin-bottom: 1rem;
+  }
+  /* Ensure parent portal takes full width when printing */
+  .max-w-xl {
+    max-w: 100% !important;
+  }
+}

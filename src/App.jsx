@@ -25,7 +25,8 @@ import {
   MessageSquare,
   Send,
   MessageCircle,
-  Award
+  Award,
+  Printer
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
 import { db, auth as primaryAuth, firebaseConfig } from './firebase';
@@ -74,6 +75,8 @@ function App() {
   const [newMessage, setNewMessage] = useState('');
   const [selectedChatUser, setSelectedChatUser] = useState(null); // For Admin
   const [messageSearch, setMessageSearch] = useState('');
+  
+  const [newRemark, setNewRemark] = useState('');
 
   // Filters for Students Tab
   const [studentSearch, setStudentSearch] = useState('');
@@ -435,6 +438,25 @@ function App() {
       });
     } catch (error) {
       console.error("Evaluate Review Error:", error);
+    }
+  };
+
+  const handleAddParentRemark = async (studentId) => {
+    if (!newRemark.trim()) return;
+    try {
+      const student = rawStudents.find(s => s.id === studentId);
+      const updatedRemarks = student.parentRemarks || [];
+      updatedRemarks.push({
+        id: Date.now().toString(),
+        text: newRemark,
+        date: new Date().toISOString(),
+        teacherName: user.name || user.email || 'المعلم'
+      });
+      await updateDoc(doc(db, "students", studentId), { parentRemarks: updatedRemarks });
+      setNewRemark('');
+    } catch (error) {
+      console.error("Error adding remark:", error);
+      alert("خطأ في إضافة الملاحظة");
     }
   };
 
@@ -952,6 +974,48 @@ function App() {
             )) : (
               <p className="text-center py-10 text-gray-400">لا يوجد بيانات حفظ مسجلة لهذا الطالب</p>
             )}
+          </div>
+        </div>
+
+        <div className="card">
+          <h4 className="font-bold border-b pb-4 mb-4 flex items-center gap-2">
+            <MessageSquare size={20} className="text-primary" />
+            ملاحظات لولي الأمر
+          </h4>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <input 
+                type="text"
+                value={newRemark}
+                onChange={e => setNewRemark(e.target.value)}
+                placeholder="اكتب ملاحظة لولي الأمر هنا..."
+                className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm"
+              />
+              <button 
+                onClick={() => handleAddParentRemark(student.id)}
+                disabled={!newRemark.trim()}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 flex items-center gap-2 text-sm font-bold"
+              >
+                <Send size={16} className="rtl:-scale-x-100" />
+                إرسال
+              </button>
+            </div>
+            
+            <div className="space-y-2 mt-4 max-h-40 overflow-y-auto pr-2">
+              {student.parentRemarks && student.parentRemarks.length > 0 ? (
+                [...student.parentRemarks].reverse().map((rem, idx) => (
+                  <div key={rem.id || idx} className="bg-gray-50 p-3 rounded-lg border text-sm">
+                    <p className="text-gray-800">{rem.text}</p>
+                    <div className="flex justify-between items-center mt-2 text-[10px] text-gray-500">
+                      <span>{rem.teacherName}</span>
+                      <span>{format(new Date(rem.date), 'dd/MM/yyyy HH:mm')}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-center py-4 text-gray-400 text-sm">لا توجد ملاحظات مسجلة</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -2030,12 +2094,21 @@ function App() {
          </div>
        ) : (
          <div className="space-y-6">
-            <button 
-               onClick={() => setSelectedParentStudent(null)}
-               className="text-primary flex items-center gap-2 hover:underline"
-            >
-               ← العودة للبحث
-            </button>
+            <div className="flex justify-between items-center no-print">
+               <button 
+                  onClick={() => setSelectedParentStudent(null)}
+                  className="text-primary flex items-center gap-2 hover:underline"
+               >
+                  ← العودة للبحث
+               </button>
+               <button 
+                  onClick={() => window.print()}
+                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2 text-sm font-bold"
+               >
+                  <Printer size={16} />
+                  طباعة التقرير
+               </button>
+            </div>
             <div className="card bg-primary text-white">
                <h3 className="text-xl font-bold">{selectedParentStudent.name}</h3>
                <p className="opacity-80">ولي الأمر: {selectedParentStudent.parentName}</p>
@@ -2133,6 +2206,25 @@ function App() {
                        </span>
                     </div>
                   ))}
+               </div>
+            </div>
+
+            <div className="card">
+               <h4 className="font-bold border-b pb-2 mb-4 text-primary">ملاحظات المعلم</h4>
+               <div className="space-y-3">
+                  {selectedParentStudent.parentRemarks && selectedParentStudent.parentRemarks.length > 0 ? (
+                    [...selectedParentStudent.parentRemarks].reverse().map((rem, i) => (
+                      <div key={i} className="bg-gray-50 p-3 rounded-lg border text-sm">
+                        <p className="text-gray-800 leading-relaxed">{rem.text}</p>
+                        <div className="flex justify-between items-center mt-2 text-[10px] text-gray-500">
+                          <span>{rem.teacherName}</span>
+                          <span>{new Date(rem.date).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-center text-gray-400 py-4 text-sm">لا توجد ملاحظات مسجلة</p>
+                  )}
                </div>
             </div>
          </div>
