@@ -24,7 +24,8 @@ import {
   Download,
   MessageSquare,
   Send,
-  MessageCircle
+  MessageCircle,
+  Award
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
 import { db, auth as primaryAuth, firebaseConfig } from './firebase';
@@ -956,75 +957,205 @@ function App() {
       </div>
     );
   };
-  const renderDashboard = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="card border-r-4 border-r-primary flex items-center justify-between">
-          <div>
-            <p className="text-gray-500 text-sm">إجمالي الطلاب</p>
-            <h3 className="text-3xl font-bold">{students.length}</h3>
-          </div>
-          <div className="p-3 bg-green-100 text-primary rounded-full">
-            <Users size={24} />
-          </div>
-        </div>
-        <div className="card border-r-4 border-r-blue-500 flex items-center justify-between">
-          <div>
-            <p className="text-gray-500 text-sm">حضور اليوم</p>
-            <h3 className="text-3xl font-bold">
-              {attendance.filter(a => a.status === 'present' && a.date === format(new Date(), 'yyyy-MM-dd')).length}
-            </h3>
-          </div>
-          <div className="p-3 bg-blue-100 text-blue-500 rounded-full">
-            <Calendar size={24} />
-          </div>
-        </div>
-        <div className="card border-r-4 border-r-yellow-500 flex items-center justify-between">
-          <div>
-            <p className="text-gray-500 text-sm">تسميعات اليوم</p>
-            <h3 className="text-3xl font-bold">
-              {memorization.filter(m => m.date && m.date.startsWith(format(new Date(), 'yyyy-MM-dd'))).length}
-            </h3>
-          </div>
-          <div className="p-3 bg-yellow-100 text-yellow-500 rounded-full">
-            <TrendingUp size={24} />
-          </div>
-        </div>
-      </div>
+  const renderDashboard = () => {
+    // 1. Leaderboard Logic
+    const studentStats = {};
+    students.forEach(s => {
+      studentStats[s.id] = { ...s, score: 0 };
+    });
+    memorization.forEach(m => {
+      if (m.status === 'good' && studentStats[m.studentId]) {
+        studentStats[m.studentId].score += 1;
+      }
+    });
+    const leaderboard = Object.values(studentStats)
+      .filter(s => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
 
-      <div className="card">
-        <h3 className="text-lg font-bold mb-4">نشاط أخير (التسميع)</h3>
-        <div className="space-y-4">
-          {memorization.slice(0, 5).map((memo) => (
-            <div key={memo.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
-                <span className="font-bold text-sm block">
-                  {students.find(s => s.id === memo.studentId)?.name || 'طالب محذوف'}
-                </span>
-                <span className="text-xs text-gray-500">
-                   {memo.memoType === 'hizb' || memo.hizb ? `الحزب ${memo.hizb}` : `سورة ${memo.surah}`}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                   memo.status === 'good' ? 'bg-green-100 text-green-700' :
-                   memo.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                }`}>
-                   {memo.status === 'good' ? 'جيد' : memo.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
-                </span>
-                <span className="text-[10px] text-gray-400 block mt-1">
-                  {memo.date ? format(new Date(memo.date), 'HH:mm', { locale: ar }) : '--'}
-                </span>
-              </div>
+    // 2. Attendance Trend (Last 7 Days)
+    const trendDays = 7;
+    const today = new Date();
+    const attendanceData = [];
+    const memoData = [];
+    
+    for (let i = trendDays - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = format(d, 'yyyy-MM-dd');
+      const dayLabel = format(d, 'EEEE', { locale: ar }).split(' ')[0];
+      
+      const dayAtt = attendance.filter(a => a.date === dateStr);
+      const present = dayAtt.filter(a => a.status === 'present').length;
+      const absent = dayAtt.filter(a => a.status === 'absent').length;
+      attendanceData.push({ dayLabel, dateStr, present, absent, total: present + absent });
+
+      const dayMemo = memorization.filter(m => m.date && m.date.startsWith(dateStr));
+      memoData.push({ dayLabel, count: dayMemo.length });
+    }
+
+    const maxAtt = Math.max(...attendanceData.map(d => d.total), 1);
+    const maxMemo = Math.max(...memoData.map(d => d.count), 1);
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="card border-r-4 border-r-primary flex items-center justify-between hover:shadow-md transition-shadow">
+            <div>
+              <p className="text-gray-500 text-sm">إجمالي الطلاب</p>
+              <h3 className="text-3xl font-bold text-gray-800">{students.length}</h3>
             </div>
-          ))}
-          {memorization.length === 0 && (
-            <p className="text-gray-400 text-center py-8">لا يوجد نشاط مسجل اليوم</p>
-          )}
+            <div className="p-3 bg-green-100 text-primary rounded-full">
+              <Users size={24} />
+            </div>
+          </div>
+          <div className="card border-r-4 border-r-blue-500 flex items-center justify-between hover:shadow-md transition-shadow">
+            <div>
+              <p className="text-gray-500 text-sm">حضور اليوم</p>
+              <h3 className="text-3xl font-bold text-gray-800">
+                {attendance.filter(a => a.status === 'present' && a.date === format(new Date(), 'yyyy-MM-dd')).length}
+              </h3>
+            </div>
+            <div className="p-3 bg-blue-100 text-blue-500 rounded-full">
+              <Calendar size={24} />
+            </div>
+          </div>
+          <div className="card border-r-4 border-r-yellow-500 flex items-center justify-between hover:shadow-md transition-shadow">
+            <div>
+              <p className="text-gray-500 text-sm">تسميعات اليوم</p>
+              <h3 className="text-3xl font-bold text-gray-800">
+                {memorization.filter(m => m.date && m.date.startsWith(format(new Date(), 'yyyy-MM-dd'))).length}
+              </h3>
+            </div>
+            <div className="p-3 bg-yellow-100 text-yellow-500 rounded-full">
+              <TrendingUp size={24} />
+            </div>
+          </div>
+        </div>
+
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Custom Bar Chart for Attendance */}
+          <div className="card">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-primary">
+              <BarChart2 size={20} />
+              إحصائيات الحضور (آخر 7 أيام)
+            </h3>
+            <div className="h-48 flex items-end justify-between gap-2 pt-4">
+              {attendanceData.map((d, i) => {
+                const presentHeight = (d.present / maxAtt) * 100;
+                const absentHeight = (d.absent / maxAtt) * 100;
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
+                    <div className="absolute -top-10 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none whitespace-nowrap">
+                      حاضر: {d.present} | غائب: {d.absent}
+                    </div>
+                    <div className="w-full h-32 bg-gray-100 rounded-t-sm flex flex-col justify-end overflow-hidden">
+                      <div style={{ height: `${absentHeight}%` }} className="bg-red-400 w-full transition-all duration-500"></div>
+                      <div style={{ height: `${presentHeight}%` }} className="bg-primary w-full transition-all duration-500"></div>
+                    </div>
+                    <span className="text-[10px] text-gray-500 truncate w-full text-center">{d.dayLabel}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-center gap-4 mt-4 text-xs">
+              <div className="flex items-center gap-1"><span className="w-3 h-3 bg-primary rounded-sm"></span>حاضر</div>
+              <div className="flex items-center gap-1"><span className="w-3 h-3 bg-red-400 rounded-sm"></span>غائب</div>
+            </div>
+          </div>
+
+          {/* Custom Bar Chart for Memorization */}
+          <div className="card">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-yellow-600">
+              <TrendingUp size={20} />
+              نشاط التسميع (آخر 7 أيام)
+            </h3>
+            <div className="h-48 flex items-end justify-between gap-2 pt-4">
+              {memoData.map((d, i) => {
+                const height = (d.count / maxMemo) * 100;
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
+                    <div className="absolute -top-8 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none whitespace-nowrap">
+                      {d.count} تسميع
+                    </div>
+                    <div className="w-full max-w-[2rem] h-32 flex flex-col justify-end">
+                      <div style={{ height: `${height}%` }} className="bg-yellow-400 rounded-t-md w-full transition-all duration-500"></div>
+                    </div>
+                    <span className="text-[10px] text-gray-500 truncate w-full text-center">{d.dayLabel}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="card">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-primary">
+              <History size={20} />
+              نشاط أخير (التسميع)
+            </h3>
+            <div className="space-y-4">
+              {memorization.slice(0, 5).map((memo) => (
+                <div key={memo.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                  <div>
+                    <span className="font-bold text-sm block text-gray-800">
+                      {students.find(s => s.id === memo.studentId)?.name || 'طالب محذوف'}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {memo.memoType === 'hizb' || memo.hizb ? `الحزب ${memo.hizb}` : `سورة ${memo.surah}`}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                      memo.status === 'good' ? 'bg-green-100 text-green-700' :
+                      memo.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {memo.status === 'good' ? 'جيد' : memo.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
+                    </span>
+                    <span className="text-[10px] text-gray-400 block mt-1">
+                      {memo.date ? format(new Date(memo.date), 'HH:mm', { locale: ar }) : '--'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {memorization.length === 0 && (
+                <p className="text-gray-400 text-center py-8">لا يوجد نشاط مسجل اليوم</p>
+              )}
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-yellow-600">
+              <Award size={20} />
+              لوحة الشرف (الأكثر إنجازاً)
+            </h3>
+            <div className="space-y-3">
+              {leaderboard.length > 0 ? leaderboard.map((student, idx) => (
+                <div key={student.id} className="flex items-center justify-between p-3 bg-gradient-to-l from-yellow-50/50 to-white border border-yellow-100 rounded-xl hover:shadow-sm transition-shadow">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-sm ${idx === 0 ? 'bg-yellow-400 text-white' : idx === 1 ? 'bg-gray-300 text-gray-700' : idx === 2 ? 'bg-amber-600 text-white' : 'bg-green-50 text-primary'}`}>
+                      {idx + 1}
+                    </div>
+                    <div>
+                      <span className="font-bold text-sm block text-gray-800">{student.name}</span>
+                      <span className="text-xs text-gray-500">{student.branch}</span>
+                    </div>
+                  </div>
+                  <div className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                    {student.score} ممتاز
+                  </div>
+                </div>
+              )) : (
+                <p className="text-gray-400 text-center py-8">لا يوجد إنجازات في لوحة الشرف بعد</p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderStudents = () => (
     selectedStudentForDetails ? renderStudentDetails(selectedStudentForDetails) : (
