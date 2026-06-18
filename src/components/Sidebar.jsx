@@ -9,7 +9,8 @@ import {
   X,
   Shield,
   RefreshCw,
-  MessageSquare
+  MessageSquare,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -23,6 +24,7 @@ const Sidebar = ({ activeTab, setActiveTab, unreadMessagesCount = 0 }) => {
     { id: 'attendance', label: 'الحضور', icon: CalendarCheck },
     { id: 'memorization', label: 'التسميع', icon: BookOpen },
     { id: 'review', label: 'المراجعة', icon: RefreshCw },
+    { id: 'exams', label: 'الامتحانات', icon: FileText },
     { id: 'messages', label: 'الرسائل', icon: MessageSquare },
     { id: 'parents', label: 'بوابة الوالدين', icon: UserCircle },
   ];

@@ -26,7 +26,8 @@ import {
   Send,
   MessageCircle,
   Award,
-  Printer
+  Printer,
+  FileText
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
 import { db, auth as primaryAuth, firebaseConfig } from './firebase';
@@ -67,6 +68,8 @@ function App() {
   const [attendance, setAttendance] = useState([]);
   const [memorization, setMemorization] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [rawExams, setRawExams] = useState([]);
+  const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Messages States
@@ -130,6 +133,15 @@ function App() {
     status: 'good'
   });
 
+  const [newExam, setNewExam] = useState({
+    studentId: '',
+    examType: 'surah', // 'surah' or 'hizb'
+    surah: '',
+    hizb: '',
+    score: '',
+    notes: ''
+  });
+
   const [selectedParentStudent, setSelectedParentStudent] = useState(null);
   const [parentCodeInput, setParentCodeInput] = useState('');
   const [parentData, setParentData] = useState({ attendance: [], memorization: [] });
@@ -185,6 +197,15 @@ function App() {
       console.error("Reviews Sync Error:", error);
     });
 
+    // Fetch exams records
+    let qExam = query(collection(db, "exams"));
+    const unsubscribeExam = onSnapshot(qExam, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setRawExams(data);
+    }, (error) => {
+      console.error("Exams Sync Error:", error);
+    });
+
     // Fetch Messages
     let qMsg = query(collection(db, "messages"), orderBy("timestamp", "asc"));
     const unsubscribeMsg = onSnapshot(qMsg, (snapshot) => {
@@ -209,6 +230,7 @@ function App() {
       unsubscribeAtt();
       unsubscribeMem();
       unsubscribeRev();
+      unsubscribeExam();
       unsubscribeTeach();
       unsubscribeMsg();
     };
@@ -234,10 +256,12 @@ function App() {
         setAttendance(rawAttendance.filter(a => branchStudentIds.includes(a.studentId)));
         setMemorization([...rawMemorization.filter(m => branchStudentIds.includes(m.studentId))].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
         setReviews([...rawReviews.filter(r => branchStudentIds.includes(r.studentId))].sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0)));
+        setExams([...rawExams.filter(e => branchStudentIds.includes(e.studentId))].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
       } else {
         setAttendance(rawAttendance);
         setMemorization([...rawMemorization].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
         setReviews([...rawReviews].sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0)));
+        setExams([...rawExams].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
       }
     } else {
       setStudents(currentStudents); // For teachers, it's already filtered by teacherId in Firestore query
@@ -255,6 +279,11 @@ function App() {
         .filter(r => r.teacherId === user.uid || myStudentIds.includes(r.studentId))
         .sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0));
       setReviews(filteredRev);
+
+      const filteredExams = rawExams
+        .filter(e => e.teacherId === user.uid || myStudentIds.includes(e.studentId))
+        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+      setExams(filteredExams);
     }
 
     // Filter messages
@@ -460,6 +489,39 @@ function App() {
     }
   };
 
+  const handleSaveExam = async (e) => {
+    e.preventDefault();
+    if (!newExam.studentId) return;
+    if (newExam.examType === 'surah' && !newExam.surah) return;
+    if (newExam.examType === 'hizb' && !newExam.hizb) return;
+    if (!newExam.score) return;
+
+    try {
+      await addDoc(collection(db, "exams"), {
+        studentId: newExam.studentId,
+        examType: newExam.examType,
+        surah: newExam.examType === 'surah' ? newExam.surah : null,
+        hizb: newExam.examType === 'hizb' ? Number(newExam.hizb) : null,
+        score: Number(newExam.score),
+        notes: newExam.notes,
+        teacherId: user.uid,
+        date: new Date().toISOString()
+      });
+      setNewExam({
+        studentId: '',
+        examType: 'surah',
+        surah: '',
+        hizb: '',
+        score: '',
+        notes: ''
+      });
+      alert("تم حفظ الامتحان بنجاح");
+    } catch (error) {
+      console.error("Save Exam Error:", error);
+      alert("حدث خطأ أثناء الحفظ");
+    }
+  };
+
   const handleDeleteReview = async (reviewId) => {
     if(window.confirm("حذف هذه المراجعة؟")) {
       try {
@@ -543,11 +605,16 @@ function App() {
       const stRev = reviews
         .filter(r => r.studentId === student.id)
         .sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0));
+
+      const stExams = exams
+        .filter(e => e.studentId === student.id)
+        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
       
       setParentData({
         attendance: stAtt,
         memorization: stMem,
-        reviews: stRev
+        reviews: stRev,
+        exams: stExams
       });
     } else {
       alert("الكود غير صحيح");
@@ -808,6 +875,14 @@ function App() {
       return true;
     }).sort((a,b) => new Date(b.assignedDate||0) - new Date(a.assignedDate||0));
 
+    const periodExams = exams.filter(e => {
+      if (e.studentId !== student.id) return false;
+      const eDate = e.date ? new Date(e.date) : new Date(0);
+      if (reportFromDate && eDate < new Date(new Date(reportFromDate).setHours(0,0,0,0))) return false;
+      if (reportToDate && eDate > new Date(new Date(reportToDate).setHours(23,59,59,999))) return false;
+      return true;
+    }).sort((a,b) => new Date(b.date||0) - new Date(a.date||0));
+
     const periodPresentCount = periodAttendance.filter(a => a.status === 'present' || a.status === 'late').length;
     const periodTotalAtt = periodAttendance.length;
 
@@ -973,6 +1048,51 @@ function App() {
               </div>
             )) : (
               <p className="text-center py-10 text-gray-400">لا يوجد بيانات حفظ مسجلة لهذا الطالب</p>
+            )}
+          </div>
+        </div>
+
+        <div className="card">
+          <h4 className="font-bold border-b pb-4 mb-4 flex items-center gap-2">
+            <FileText size={20} className="text-primary" />
+            سجل الامتحانات (السبر)
+          </h4>
+          <div className="space-y-4">
+            {periodExams.length > 0 ? (
+              <div className="overflow-x-auto">
+                 <table className="w-full text-right">
+                    <thead>
+                       <tr className="text-gray-400 text-sm border-b">
+                          <th className="pb-2 pr-2">التاريخ</th>
+                          <th className="pb-2 pr-2">الامتحان</th>
+                          <th className="pb-2 pr-2 text-center">العلامة</th>
+                          <th className="pb-2 pr-2">الملاحظات</th>
+                       </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                       {periodExams.map(ex => (
+                          <tr key={ex.id} className="hover:bg-gray-50">
+                             <td className="py-2 pr-2 text-xs text-gray-500">
+                                {ex.date ? format(new Date(ex.date), 'dd/MM/yyyy') : '--'}
+                             </td>
+                             <td className="py-2 pr-2 text-sm text-primary">
+                                {ex.examType === 'hizb' ? `حزب ${ex.hizb}` : `سورة ${ex.surah}`}
+                             </td>
+                             <td className="py-2 pr-2 text-center">
+                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${Number(ex.score) >= 90 ? 'bg-green-100 text-green-700' : Number(ex.score) >= 70 ? 'bg-blue-100 text-blue-700' : Number(ex.score) >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                                   {ex.score} / 100
+                                </span>
+                             </td>
+                             <td className="py-2 pr-2 text-xs text-gray-500 max-w-[150px] truncate">
+                                {ex.notes || '--'}
+                             </td>
+                          </tr>
+                       ))}
+                    </tbody>
+                 </table>
+              </div>
+            ) : (
+              <p className="text-center py-4 text-gray-400">لا يوجد امتحانات مسجلة</p>
             )}
           </div>
         </div>
@@ -2159,6 +2279,34 @@ function App() {
             </div>
 
             <div className="card">
+               <h4 className="font-bold border-b pb-2 mb-4">سجل الامتحانات (السبر)</h4>
+               <div className="space-y-4 max-h-64 overflow-y-auto">
+                  {parentData.exams && parentData.exams.map((ex, i) => (
+                    <div key={i} className="flex justify-between items-center border-b pb-2 last:border-0">
+                       <div>
+                          <p className="font-medium text-primary">
+                             {ex.examType === 'hizb' ? `امتحان الحزب ${ex.hizb}` : `امتحان سورة ${ex.surah}`}
+                          </p>
+                          <p className="text-[10px] text-gray-400">
+                             تاريخ: {ex.date ? new Date(ex.date).toLocaleDateString('ar-EG') : '--'}
+                          </p>
+                       </div>
+                       <div className={`text-xs px-2 py-1 rounded-full font-bold ${
+                          Number(ex.score) >= 90 ? 'bg-green-100 text-green-700' : 
+                          Number(ex.score) >= 70 ? 'bg-blue-100 text-blue-700' : 
+                          Number(ex.score) >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                       }`}>
+                          {ex.score} / 100
+                       </div>
+                    </div>
+                  ))}
+                  {(!parentData.exams || parentData.exams.length === 0) && (
+                    <p className="text-center text-gray-400 py-4">لا يوجد امتحانات مسجلة</p>
+                  )}
+               </div>
+            </div>
+
+            <div className="card">
                <h4 className="font-bold border-b pb-2 mb-4">المراجعات المطلوبة والمكتملة</h4>
                <div className="space-y-4 max-h-64 overflow-y-auto">
                   {parentData.reviews && parentData.reviews.map((r, i) => (
@@ -2433,6 +2581,149 @@ function App() {
     </div>
   );
 
+  const renderExams = () => (
+    <div className="space-y-6 animate-in fade-in duration-300">
+       <div className="card">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+             <FileText size={24} className="text-primary" />
+             تسجيل امتحان سبر
+          </h3>
+          <form onSubmit={handleSaveExam} className="space-y-4">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                   <label className="text-sm font-medium">الطالب</label>
+                   <select 
+                      required
+                      value={newExam.studentId}
+                      onChange={e => setNewExam({...newExam, studentId: e.target.value})}
+                      className="w-full px-4 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-primary outline-none"
+                   >
+                      <option value="">اختر الطالب...</option>
+                      {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                   </select>
+                </div>
+                <div className="space-y-1">
+                   <label className="text-sm font-medium">نوع الامتحان</label>
+                   <select 
+                      value={newExam.examType}
+                      onChange={e => setNewExam({...newExam, examType: e.target.value, surah: '', hizb: ''})}
+                      className="w-full px-4 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-primary outline-none"
+                   >
+                      <option value="surah">امتحان سورة</option>
+                      <option value="hizb">امتحان حزب</option>
+                   </select>
+                </div>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {newExam.examType === 'surah' ? (
+                   <div className="space-y-1">
+                      <label className="text-sm font-medium">السورة</label>
+                      <select 
+                         required
+                         value={newExam.surah}
+                         onChange={e => setNewExam({...newExam, surah: e.target.value})}
+                         className="w-full px-4 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-primary outline-none"
+                      >
+                         <option value="">اختر السورة...</option>
+                         {SURAH_LIST.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                   </div>
+                ) : (
+                   <div className="space-y-1">
+                      <label className="text-sm font-medium">الحزب</label>
+                      <select 
+                         required
+                         value={newExam.hizb}
+                         onChange={e => setNewExam({...newExam, hizb: e.target.value})}
+                         className="w-full px-4 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-primary outline-none"
+                      >
+                         <option value="">اختر الحزب...</option>
+                         {[...Array(60)].map((_, i) => <option key={i+1} value={i+1}>{i+1}</option>)}
+                      </select>
+                   </div>
+                )}
+                
+                <div className="space-y-1">
+                   <label className="text-sm font-medium text-blue-600">العلامة (من 100)</label>
+                   <input 
+                      type="number"
+                      required
+                      min="0"
+                      max="100"
+                      value={newExam.score}
+                      onChange={e => setNewExam({...newExam, score: e.target.value})}
+                      placeholder="مثال: 95"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none font-bold text-lg"
+                   />
+                </div>
+             </div>
+
+             <div className="space-y-1">
+                <label className="text-sm font-medium">ملاحظات (اختياري)</label>
+                <input 
+                   type="text"
+                   value={newExam.notes}
+                   onChange={e => setNewExam({...newExam, notes: e.target.value})}
+                   placeholder="اكتب ملاحظاتك عن أداء الطالب..."
+                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm"
+                />
+             </div>
+
+             <button type="submit" className="btn-primary w-full py-3">
+                <FileText size={20} />
+                حفظ نتيجة الامتحان
+             </button>
+          </form>
+       </div>
+
+       <div className="card">
+          <h3 className="text-xl font-bold mb-4">سجل الامتحانات</h3>
+          <div className="overflow-x-auto">
+             <table className="w-full text-right">
+                <thead>
+                   <tr className="text-gray-400 text-sm border-b">
+                      <th className="pb-4 pr-2">التاريخ</th>
+                      <th className="pb-4 pr-2">الطالب</th>
+                      <th className="pb-4 pr-2">الامتحان</th>
+                      <th className="pb-4 pr-2 text-center">العلامة</th>
+                      <th className="pb-4 pr-2">الملاحظات</th>
+                   </tr>
+                </thead>
+                <tbody className="divide-y">
+                   {exams.map(ex => (
+                      <tr key={ex.id} className="hover:bg-gray-50">
+                         <td className="py-3 pr-2 text-xs text-gray-500">
+                            {ex.date ? format(new Date(ex.date), 'dd/MM/yyyy') : '--'}
+                         </td>
+                         <td className="py-3 pr-2 font-bold text-sm">
+                            {students.find(s => s.id === ex.studentId)?.name || 'طالب محذوف'}
+                         </td>
+                         <td className="py-3 pr-2 text-sm text-primary">
+                            {ex.examType === 'hizb' ? `امتحان الحزب ${ex.hizb}` : `امتحان سورة ${ex.surah}`}
+                         </td>
+                         <td className="py-3 pr-2 text-center">
+                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${Number(ex.score) >= 90 ? 'bg-green-100 text-green-700' : Number(ex.score) >= 70 ? 'bg-blue-100 text-blue-700' : Number(ex.score) >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                               {ex.score} / 100
+                            </span>
+                         </td>
+                         <td className="py-3 pr-2 text-xs text-gray-500 max-w-[200px] truncate">
+                            {ex.notes || '--'}
+                         </td>
+                      </tr>
+                   ))}
+                   {exams.length === 0 && (
+                      <tr>
+                         <td colSpan="5" className="text-center py-8 text-gray-400">لا يوجد امتحانات مسجلة</td>
+                      </tr>
+                   )}
+                </tbody>
+             </table>
+          </div>
+       </div>
+    </div>
+  );
+
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return renderDashboard();
@@ -2440,6 +2731,7 @@ function App() {
       case 'attendance': return renderAttendance();
       case 'memorization': return renderMemorization();
       case 'review': return renderReview();
+      case 'exams': return renderExams();
       case 'messages': return renderMessages();
       case 'parents': return renderParents();
       case 'admin': return role === 'admin' ? renderAdmin() : renderDashboard();
