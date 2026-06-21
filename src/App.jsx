@@ -66,6 +66,7 @@ export const STUDENT_LEVELS = ['تحضيري', 'ابتدائي', 'متوسط', '
 function App() {
   const { user, role, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [installPrompt, setInstallPrompt] = useState(null);
   const [unauthParentCode, setUnauthParentCode] = useState(null);
   const [rawStudents, setRawStudents] = useState([]);
   const [students, setStudents] = useState([]);
@@ -248,6 +249,24 @@ function App() {
       unsubscribeMsg();
     };
   }, [user, role]);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setInstallPrompt(null);
+    }
+  };
 
   // Reactive Data Filtering (Fixes stale closures and allows history)
   useEffect(() => {
@@ -3176,7 +3195,16 @@ function App() {
               أهلاً بك {user?.name || (role === 'admin' ? 'أيها المسؤول' : 'يا معلم')}
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-4 mt-4 lg:mt-0">
+            {installPrompt && (
+              <button 
+                onClick={handleInstallClick}
+                className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 rounded-lg shadow hover:shadow-lg transition-all text-sm font-bold animate-pulse"
+              >
+                <Download size={18} />
+                تثبيت التطبيق
+              </button>
+            )}
             <button 
               onClick={logout}
               className="flex items-center gap-2 text-red-500 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors text-sm"
