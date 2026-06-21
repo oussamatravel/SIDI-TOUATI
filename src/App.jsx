@@ -721,35 +721,39 @@ function App() {
     const wsStudents = XLSX.utils.json_to_sheet(studentsData);
     XLSX.utils.book_append_sheet(wb, wsStudents, "الطلاب");
 
-    // 2. Attendance Sheet
-    const attendanceData = attendance.map(a => {
-      const stName = students.find(s => s.id === a.studentId)?.name || 'غير معروف';
-      let statusAr = '';
-      if(a.status === 'present') statusAr = 'حاضر';
-      if(a.status === 'absent') statusAr = 'غائب';
-      if(a.status === 'late') statusAr = 'متأخر';
-      if(a.status === 'excused') statusAr = 'مأذون';
-      return {
-        "التاريخ": a.date,
-        "الطالب": stName,
-        "الحالة": statusAr,
-        "المعلم": a.teacherName || ''
-      };
+    // 2. Attendance Sheet (Pivot Table Format)
+    const allDates = [...new Set(attendance.map(a => a.date))].sort((a, b) => new Date(a) - new Date(b));
+    const attendanceData = students.map(student => {
+      const row = { "الطالب": student.name };
+      allDates.forEach(date => {
+        const record = attendance.find(a => a.studentId === student.id && a.date === date);
+        let statusAr = '-';
+        if(record) {
+          if(record.status === 'present') statusAr = 'حاضر';
+          if(record.status === 'absent') statusAr = 'غائب';
+          if(record.status === 'late') statusAr = 'متأخر';
+          if(record.status === 'excused') statusAr = 'مأذون';
+        }
+        row[date] = statusAr;
+      });
+      return row;
     });
     const wsAttendance = XLSX.utils.json_to_sheet(attendanceData);
     XLSX.utils.book_append_sheet(wb, wsAttendance, "سجل الحضور");
 
-    // 3. Exams Sheet
-    const examsData = exams.map(e => {
-      const stName = students.find(s => s.id === e.studentId)?.name || 'غير معروف';
-      return {
-        "التاريخ": e.date,
-        "الطالب": stName,
-        "نوع الامتحان": e.examType === 'hizb' ? 'حزب' : 'سورة',
-        "التفاصيل": e.examType === 'hizb' ? `الحزب ${e.hizb}` : `سورة ${e.surah}`,
-        "العلامة": e.score,
-        "الملاحظات": e.notes || ''
-      };
+    // 3. Exams Sheet (Pivot Table Format)
+    const examDates = [...new Set(exams.map(e => e.date))].sort((a, b) => new Date(a) - new Date(b));
+    const examsData = students.map(student => {
+      const row = { "الطالب": student.name };
+      examDates.forEach(date => {
+        const records = exams.filter(e => e.studentId === student.id && e.date === date);
+        if (records.length > 0) {
+          row[date] = records.map(r => `${r.score} (${r.examType === 'hizb' ? 'حزب ' + r.hizb : 'سورة ' + r.surah})`).join(' | ');
+        } else {
+          row[date] = '-';
+        }
+      });
+      return row;
     });
     const wsExams = XLSX.utils.json_to_sheet(examsData);
     XLSX.utils.book_append_sheet(wb, wsExams, "الامتحانات");
