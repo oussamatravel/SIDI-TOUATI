@@ -27,7 +27,9 @@ import {
   MessageCircle,
   Award,
   Printer,
-  FileText
+  FileText,
+  BellRing,
+  AlertTriangle
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
 import { db, auth as primaryAuth, firebaseConfig } from './firebase';
@@ -1181,6 +1183,84 @@ function App() {
     const maxAtt = Math.max(...attendanceData.map(d => d.total), 1);
     const maxMemo = Math.max(...memoData.map(d => d.count), 1);
 
+    // 3. Smart Notifications Logic
+    const smartNotifications = [];
+    
+    students.forEach(student => {
+      // Rule 1: 3 consecutive attended sessions without any memorization
+      const stAtt = attendance
+        .filter(a => a.studentId === student.id && (a.status === 'present' || a.status === 'late'))
+        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+        
+      if (stAtt.length >= 3) {
+        const recent3 = stAtt.slice(0, 3);
+        let hasMemoInRecent3 = false;
+        for (const att of recent3) {
+          const attDateStr = new Date(att.date).toDateString();
+          const hasMemo = memorization.some(m => m.studentId === student.id && new Date(m.date).toDateString() === attDateStr);
+          if (hasMemo) {
+            hasMemoInRecent3 = true;
+            break;
+          }
+        }
+        
+        if (!hasMemoInRecent3) {
+          smartNotifications.push({
+            id: `memo-${student.id}`,
+            type: 'absence',
+            priority: 'high',
+            studentId: student.id,
+            message: `الطالب ${student.name} حضر 3 حصص متتالية دون القيام بأي تسميع.`
+          });
+        }
+      }
+
+      // Rule 2: No exam in the last 30 days
+      const stExams = exams
+        .filter(e => e.studentId === student.id)
+        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+      
+      const lastExamDate = stExams.length > 0 ? new Date(stExams[0].date) : null;
+      const createdAt = student.createdAt ? new Date(student.createdAt) : null;
+      
+      let noExamDays = 0;
+      if (lastExamDate) {
+        noExamDays = Math.floor((today - lastExamDate) / (1000 * 60 * 60 * 24));
+      } else if (createdAt) {
+        noExamDays = Math.floor((today - createdAt) / (1000 * 60 * 60 * 24));
+      }
+
+      if (noExamDays > 30) {
+        smartNotifications.push({
+          id: `exam-${student.id}`,
+          type: 'exam',
+          priority: 'medium',
+          studentId: student.id,
+          message: `الطالب ${student.name} لم يتم امتحانه (سبر) منذ أكثر من شهر.`
+        });
+      }
+    });
+
+    // Rule 3: Pending reviews check
+    reviews.filter(r => r.status === 'pending').forEach(r => {
+      const assigned = new Date(r.assignedDate || 0);
+      const daysPending = Math.floor((today - assigned) / (1000 * 60 * 60 * 24));
+      
+      if (daysPending > 7) {
+        const sName = students.find(s => s.id === r.studentId)?.name || 'طالب محذوف';
+        smartNotifications.push({
+          id: `rev-${r.id}`,
+          type: 'review',
+          priority: 'medium',
+          studentId: r.studentId,
+          message: `مراجعة متأخرة للطالب ${sName} منذ ${daysPending} أيام.`
+        });
+      }
+    });
+
+    // Sort by priority (high first)
+    smartNotifications.sort((a, b) => (a.priority === 'high' ? -1 : 1));
+
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1216,6 +1296,30 @@ function App() {
             </div>
           </div>
         </div>
+
+        {/* Smart Notifications */}
+        {smartNotifications.length > 0 && (
+          <div className="card border-t-4 border-t-orange-500 bg-orange-50/30">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-orange-600">
+              <BellRing size={20} />
+              التنبيهات الذكية
+            </h3>
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+              {smartNotifications.map(note => (
+                <div key={note.id} className="flex items-start gap-3 p-3 bg-white rounded-lg border hover:shadow-sm transition-shadow">
+                  {note.priority === 'high' ? (
+                    <AlertTriangle className="text-red-500 flex-shrink-0 mt-0.5" size={18} />
+                  ) : (
+                    <BellRing className="text-orange-400 flex-shrink-0 mt-0.5" size={18} />
+                  )}
+                  <p className={`text-sm font-medium ${note.priority === 'high' ? 'text-red-700' : 'text-gray-800'}`}>
+                    {note.message}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
