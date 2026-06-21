@@ -692,7 +692,16 @@ function App() {
     // Convert to JSON string
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     
-    // Create   const handleExportToExcel = () => {
+    // Create a virtual link and trigger download
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `quran_backup_${format(new Date(), 'yyyy-MM-dd')}.json`);
+    document.body.appendChild(downloadAnchorNode); // required for firefox
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const handleExportToExcel = () => {
     const wb = XLSX.utils.book_new();
     wb.Workbook = { Views: [{ RTL: true }] }; // Set right-to-left for Arabic
 
