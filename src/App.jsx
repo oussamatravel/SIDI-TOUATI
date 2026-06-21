@@ -72,6 +72,7 @@ function App() {
   const [teachers, setTeachers] = useState([]);
   const [rawTeachers, setRawTeachers] = useState([]);
   const [adminBranchFilter, setAdminBranchFilter] = useState('All');
+  const [adminTeacherFilter, setAdminTeacherFilter] = useState('All');
   const [rawAttendance, setRawAttendance] = useState([]);
   const [rawMemorization, setRawMemorization] = useState([]);
   const [rawReviews, setRawReviews] = useState([]);
@@ -253,15 +254,22 @@ function App() {
     let currentStudents = rawStudents;
     
     if (role === 'admin') {
+      let filteredTeachers = rawTeachers;
       if (adminBranchFilter !== 'All') {
         currentStudents = rawStudents.filter(s => s.branch === adminBranchFilter);
-        setTeachers(rawTeachers.filter(t => t.branch === adminBranchFilter));
+        filteredTeachers = rawTeachers.filter(t => t.branch === adminBranchFilter);
       } else {
-        setTeachers(rawTeachers);
+        currentStudents = rawStudents;
       }
+      setTeachers(filteredTeachers);
+
+      if (adminTeacherFilter !== 'All') {
+        currentStudents = currentStudents.filter(s => s.teacherId === adminTeacherFilter);
+      }
+
       setStudents(currentStudents);
 
-      if (adminBranchFilter !== 'All') {
+      if (adminBranchFilter !== 'All' || adminTeacherFilter !== 'All') {
         const branchStudentIds = currentStudents.map(s => s.id);
         setAttendance(rawAttendance.filter(a => branchStudentIds.includes(a.studentId)));
         setMemorization([...rawMemorization.filter(m => branchStudentIds.includes(m.studentId))].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
@@ -303,7 +311,7 @@ function App() {
       setMessages(rawMessages.filter(m => m.senderId === user.uid || m.receiverId === user.uid || m.receiverId === 'all'));
     }
 
-  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, rawMessages, role, user, adminBranchFilter]);
+  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, rawMessages, role, user, adminBranchFilter, adminTeacherFilter]);
 
   // Messages Unread Logic
   const unreadMessagesCount = messages.filter(m => m.readStatus === false && (role === 'admin' ? m.receiverId === 'admin' : (m.receiverId === user?.uid || m.receiverId === 'all'))).length;
@@ -747,7 +755,12 @@ function App() {
     XLSX.utils.book_append_sheet(wb, wsExams, "الامتحانات");
 
     // Generate Excel File
-    const fileName = `تقرير_${adminBranchFilter === 'All' ? 'شامل' : adminBranchFilter}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    let fileNameSuffix = adminBranchFilter === 'All' ? 'شامل' : adminBranchFilter;
+    if (adminTeacherFilter !== 'All') {
+      const teacherName = teachers.find(t => t.id === adminTeacherFilter)?.name || 'معلم';
+      fileNameSuffix += `_${teacherName}`;
+    }
+    const fileName = `تقرير_${fileNameSuffix}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
     XLSX.writeFile(wb, fileName);
   };
 
@@ -2607,19 +2620,38 @@ function App() {
 
   const renderAdmin = () => (
     <div className="space-y-8">
-       {/* Branch Filter */}
-       <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border">
-          <h3 className="font-bold text-gray-700">تصفية حسب المدرسة:</h3>
-          <select 
-             value={adminBranchFilter}
-             onChange={(e) => setAdminBranchFilter(e.target.value)}
-             className="px-4 py-2 border rounded-xl bg-gray-50 focus:ring-2 focus:ring-primary outline-none"
-          >
-             <option value="All">جميع المدارس</option>
-             {SCHOOL_BRANCHES.map(branch => (
-               <option key={branch} value={branch}>{branch}</option>
-             ))}
-          </select>
+       {/* Filters */}
+       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+         <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border">
+            <h3 className="font-bold text-gray-700">تصفية حسب المدرسة:</h3>
+            <select 
+               value={adminBranchFilter}
+               onChange={(e) => {
+                 setAdminBranchFilter(e.target.value);
+                 setAdminTeacherFilter('All'); // Reset teacher filter when school changes
+               }}
+               className="px-4 py-2 border rounded-xl bg-gray-50 focus:ring-2 focus:ring-primary outline-none"
+            >
+               <option value="All">جميع المدارس</option>
+               {SCHOOL_BRANCHES.map(branch => (
+                 <option key={branch} value={branch}>{branch}</option>
+               ))}
+            </select>
+         </div>
+
+         <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border">
+            <h3 className="font-bold text-gray-700">تصفية حسب المعلم:</h3>
+            <select 
+               value={adminTeacherFilter}
+               onChange={(e) => setAdminTeacherFilter(e.target.value)}
+               className="px-4 py-2 border rounded-xl bg-gray-50 focus:ring-2 focus:ring-primary outline-none max-w-[200px]"
+            >
+               <option value="All">جميع المعلمين</option>
+               {teachers.map(t => (
+                 <option key={t.id} value={t.id}>{t.name}</option>
+               ))}
+            </select>
+         </div>
        </div>
 
        <div className="card bg-gray-900 text-white p-8 rounded-2xl">
