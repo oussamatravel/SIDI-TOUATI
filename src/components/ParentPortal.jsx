@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { UserCircle, LogOut, Calendar } from 'lucide-react';
+import { calculateProgress } from '../utils/progressCalculator';
+import VisualQuran from './VisualQuran';
 
 function ParentPortal({ studentCode, onLogout }) {
   const [student, setStudent] = useState(null);
@@ -145,6 +147,8 @@ function ParentPortal({ studentCode, onLogout }) {
               )}
            </div>
         </div>
+
+        <VisualQuran progressSurahs={calculateProgress(parentData.memorization).surahs} />
 
         <div className="bg-white rounded-2xl shadow-sm border p-6">
            <h4 className="font-bold border-b pb-4 mb-4 text-lg">سجل الحفظ</h4>

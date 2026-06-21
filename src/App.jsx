@@ -3,6 +3,8 @@ import Sidebar from './components/Sidebar';
 import Login from './components/Login';
 import { useAuth } from './context/AuthContext';
 import { SURAH_LIST } from './constants/surahs';
+import { calculateProgress } from './utils/progressCalculator';
+import VisualQuran from './components/VisualQuran';
 import { 
   Users, 
   Calendar, 
@@ -654,78 +656,7 @@ function App() {
 
   const calculateStudentProgress = (studentId) => {
     const studentMemos = memorization.filter(m => m.studentId === studentId);
-    const progressBySurah = {};
-    const uniqueAyahsMapped = new Set();
-
-    studentMemos.forEach(memo => {
-      if (memo.memoType === 'hizb' || memo.hizb) {
-        const hizbNum = parseInt(memo.hizb);
-        const hizbAyahs = getHizbAyahList(hizbNum);
-        hizbAyahs.forEach(a => {
-           uniqueAyahsMapped.add(`${a.surahId}-${a.ayah}`);
-           if (!progressBySurah[a.surahId]) {
-             const sData = QURAN_DATA[a.surahId - 1];
-             progressBySurah[a.surahId] = { name: sData.name, total: sData.ayahs, memorized: new Set() };
-           }
-           progressBySurah[a.surahId].memorized.add(a.ayah);
-        });
-      } else {
-        const surahData = QURAN_DATA.find(s => s.name === memo.surah);
-        if (!surahData) return;
-
-        if (!progressBySurah[surahData.id]) {
-          progressBySurah[surahData.id] = { 
-            name: surahData.name, 
-            total: surahData.ayahs, 
-            memorized: new Set() 
-          };
-        }
-
-        const from = parseInt(memo.fromAyah);
-        const to = parseInt(memo.toAyah);
-        
-        for (let i = from; i <= to; i++) {
-          if (i <= surahData.ayahs) {
-            progressBySurah[surahData.id].memorized.add(i);
-            uniqueAyahsMapped.add(`${surahData.id}-${i}`);
-          }
-        }
-      }
-    });
-
-    const surahs = Object.values(progressBySurah).map(s => ({
-      name: s.name,
-      percentage: Math.round((s.memorized.size / s.total) * 100),
-      count: s.memorized.size,
-      total: s.total
-    })).sort((a, b) => b.percentage - a.percentage);
-
-
-    // Count completed Hizbs: unique Hizb numbers from hizb-type records
-    const completedHizbsSet = new Set();
-    studentMemos.forEach(memo => {
-      if (memo.memoType === 'hizb' || memo.hizb) {
-        completedHizbsSet.add(parseInt(memo.hizb));
-      }
-    });
-    // Also check if ayah coverage from surah records completes any Hizb
-    for (let h = 1; h <= 60; h++) {
-      if (completedHizbsSet.has(h)) continue; // already counted
-      const hizbAyahs = getHizbAyahList(h);
-      if (hizbAyahs.length === 0) continue;
-      const covered = hizbAyahs.filter(a => uniqueAyahsMapped.has(`${a.surahId}-${a.ayah}`)).length;
-      if (covered >= hizbAyahs.length) completedHizbsSet.add(h);
-    }
-    const totalPercentage = Math.round((completedHizbsSet.size / TOTAL_HIZB_COUNT) * 100);
-    const totalHizbs = completedHizbsSet.size;
-
-    return { 
-      surahs, 
-      totalPercentage, 
-      totalHizbs, 
-      totalAyahs: uniqueAyahsMapped.size,
-      recordCount: studentMemos.length
-    };
+    return calculateProgress(studentMemos);
   };
 
   const renderMessages = () => {
@@ -1028,6 +959,8 @@ function App() {
              </div>
           </div>
         </div>
+
+        <VisualQuran progressSurahs={progress.surahs} />
 
         <div className="card">
           <h4 className="font-bold border-b pb-4 mb-4 flex items-center gap-2">
@@ -2352,6 +2285,8 @@ function App() {
                   <p className="text-2xl font-bold text-blue-600">{parentData.memorization.length}</p>
                </div>
             </div>
+
+            <VisualQuran progressSurahs={calculateProgress(parentData.memorization).surahs} />
 
             <div className="card">
                <h4 className="font-bold border-b pb-2 mb-4">سجل الحفظ</h4>
