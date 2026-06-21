@@ -31,12 +31,18 @@ import {
   Printer,
   FileText,
   BellRing,
-  AlertTriangle
+  AlertTriangle,
+  Medal,
+  Star,
+  Target,
+  ShieldCheck,
+  Trophy
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
 import { db, auth as primaryAuth, firebaseConfig } from './firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import * as XLSX from 'xlsx';
 import { 
   collection, 
   addDoc, 
@@ -687,9 +693,111 @@ function App() {
     downloadAnchorNode.remove();
   };
 
+  const handleExportToExcel = () => {
+    const wb = XLSX.utils.book_new();
+    wb.Workbook = { Views: [{ RTL: true }] }; // Set right-to-left for Arabic
+
+    // 1. Students Sheet
+    const studentsData = students.map(s => {
+      const p = calculateStudentProgress(s.id);
+      return {
+        "الاسم": s.name,
+        "العمر": s.age || '',
+        "الفرع": s.branch,
+        "المستوى": s.level || '',
+        "تاريخ التسجيل": s.createdAt ? new Date(s.createdAt).toLocaleDateString('ar-EG') : '',
+        "التقدم العام (%)": `${p.totalPercentage}%`,
+        "الأحزاب المحفوظة": p.totalHizbs
+      };
+    });
+    const wsStudents = XLSX.utils.json_to_sheet(studentsData);
+    XLSX.utils.book_append_sheet(wb, wsStudents, "الطلاب");
+
+    // 2. Attendance Sheet
+    const attendanceData = attendance.map(a => {
+      const stName = students.find(s => s.id === a.studentId)?.name || 'غير معروف';
+      let statusAr = '';
+      if(a.status === 'present') statusAr = 'حاضر';
+      if(a.status === 'absent') statusAr = 'غائب';
+      if(a.status === 'late') statusAr = 'متأخر';
+      if(a.status === 'excused') statusAr = 'مأذون';
+      return {
+        "التاريخ": a.date,
+        "الطالب": stName,
+        "الحالة": statusAr,
+        "المعلم": a.teacherName || ''
+      };
+    });
+    const wsAttendance = XLSX.utils.json_to_sheet(attendanceData);
+    XLSX.utils.book_append_sheet(wb, wsAttendance, "سجل الحضور");
+
+    // 3. Exams Sheet
+    const examsData = exams.map(e => {
+      const stName = students.find(s => s.id === e.studentId)?.name || 'غير معروف';
+      return {
+        "التاريخ": e.date,
+        "الطالب": stName,
+        "نوع الامتحان": e.examType === 'hizb' ? 'حزب' : 'سورة',
+        "التفاصيل": e.examType === 'hizb' ? `الحزب ${e.hizb}` : `سورة ${e.surah}`,
+        "العلامة": e.score,
+        "الملاحظات": e.notes || ''
+      };
+    });
+    const wsExams = XLSX.utils.json_to_sheet(examsData);
+    XLSX.utils.book_append_sheet(wb, wsExams, "الامتحانات");
+
+    // Generate Excel File
+    const fileName = `تقرير_${adminBranchFilter === 'All' ? 'شامل' : adminBranchFilter}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
   const calculateStudentProgress = (studentId) => {
     const studentMemos = memorization.filter(m => m.studentId === studentId);
     return calculateProgress(studentMemos);
+  };
+
+  const getStudentBadges = (studentId) => {
+    const badges = [];
+    const progress = calculateStudentProgress(studentId);
+    
+    // Quran Badges
+    if (progress.totalHizbs >= 60) {
+      badges.push({ id: 'quran-60', title: 'خاتم القرآن', icon: Trophy, color: 'text-yellow-500', bg: 'bg-yellow-50', desc: 'أتم حفظ 60 حزباً' });
+    } else if (progress.totalHizbs >= 30) {
+      badges.push({ id: 'quran-30', title: 'نصف القرآن', icon: Medal, color: 'text-blue-500', bg: 'bg-blue-50', desc: 'أتم حفظ 30 حزباً' });
+    } else if (progress.totalHizbs >= 15) {
+      badges.push({ id: 'quran-15', title: 'ربع القرآن', icon: Medal, color: 'text-purple-500', bg: 'bg-purple-50', desc: 'أتم حفظ 15 حزباً' });
+    } else if (progress.totalHizbs >= 2) {
+      badges.push({ id: 'quran-2', title: 'حافظ جزء', icon: Medal, color: 'text-green-500', bg: 'bg-green-50', desc: 'أتم حفظ جزئين أو أكثر' });
+    }
+
+    // Punctual Badge
+    const stAtt = attendance.filter(a => a.studentId === studentId).sort((a, b) => new Date(b.date) - new Date(a.date));
+    let consecutiveCount = 0;
+    for (let a of stAtt) {
+      if (a.status === 'present' || a.status === 'late') {
+        consecutiveCount++;
+      } else if (a.status === 'absent') {
+        break; // Streak broken
+      }
+    }
+    if (consecutiveCount >= 10) {
+      badges.push({ id: 'punctual-10', title: 'المواظب', icon: ShieldCheck, color: 'text-emerald-500', bg: 'bg-emerald-50', desc: 'حضور 10 حصص متتالية' });
+    }
+
+    // Excellent Exam Badge
+    const stExams = exams.filter(e => e.studentId === studentId);
+    if (stExams.some(e => Number(e.score) >= 90)) {
+      badges.push({ id: 'exam-excellent', title: 'الممتاز', icon: Star, color: 'text-orange-500', bg: 'bg-orange-50', desc: 'علامة 90+ في السبر' });
+    }
+
+    // Golden Reviewer Badge
+    const stRev = reviews.filter(r => r.studentId === studentId && r.status === 'evaluated');
+    if (stRev.length >= 5) {
+      badges.push({ id: 'reviewer-5', title: 'المراجع الذهبي', icon: Target, color: 'text-indigo-500', bg: 'bg-indigo-50', desc: 'أتم 5 مراجعات بنجاح' });
+    }
+
+    return badges;
   };
 
   const renderMessages = () => {
@@ -861,6 +969,8 @@ function App() {
 
     const periodPresentCount = periodAttendance.filter(a => a.status === 'present' || a.status === 'late').length;
     const periodTotalAtt = periodAttendance.length;
+    
+    const badges = getStudentBadges(student.id);
 
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
@@ -889,6 +999,29 @@ function App() {
             </div>
           </div>
         </div>
+
+        {/* Badges Section */}
+        {badges.length > 0 && (
+          <div className="card border-t-4 border-t-yellow-400 bg-gradient-to-l from-yellow-50/50 to-white">
+            <h4 className="font-bold border-b pb-4 mb-4 flex items-center gap-2 text-gray-800">
+              <Award size={20} className="text-yellow-500" />
+              الشارات والإنجازات
+            </h4>
+            <div className="flex flex-wrap gap-4">
+              {badges.map(b => (
+                <div key={b.id} className={`flex items-center gap-3 p-3 rounded-2xl border bg-white shadow-sm hover:shadow-md transition-shadow`}>
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${b.bg} ${b.color}`}>
+                    <b.icon size={24} />
+                  </div>
+                  <div>
+                    <p className={`font-bold text-sm ${b.color}`}>{b.title}</p>
+                    <p className="text-xs text-gray-500">{b.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="card text-center py-8">
@@ -2507,13 +2640,20 @@ function App() {
                 <p className="text-xl font-bold">{teachers.length}</p>
              </div>
           </div>
-          <div className="mt-6 flex justify-end">
+          <div className="mt-6 flex flex-wrap gap-4 justify-end">
+             <button 
+                onClick={handleExportToExcel}
+                className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold px-6 py-3 rounded-lg transition-colors text-sm shadow-lg"
+             >
+                <Download size={18} />
+                تصدير التقارير (Excel)
+             </button>
              <button 
                 onClick={handleExportData}
                 className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold px-6 py-3 rounded-lg transition-colors text-sm shadow-lg"
              >
                 <Download size={18} />
-                تحميل نسخة احتياطية (Backup)
+                تحميل نسخة احتياطية (JSON)
              </button>
           </div>
        </div>

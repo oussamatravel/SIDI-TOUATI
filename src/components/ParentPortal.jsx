@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { UserCircle, LogOut, Calendar } from 'lucide-react';
+import { UserCircle, LogOut, Calendar, Medal, Star, Target, ShieldCheck, Trophy, Award } from 'lucide-react';
 import { calculateProgress } from '../utils/progressCalculator';
 import VisualQuran from './VisualQuran';
 
 function ParentPortal({ studentCode, onLogout }) {
   const [student, setStudent] = useState(null);
-  const [parentData, setParentData] = useState({ attendance: [], memorization: [], reviews: [] });
+  const [parentData, setParentData] = useState({ attendance: [], memorization: [], reviews: [], exams: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -32,21 +32,25 @@ function ParentPortal({ studentCode, onLogout }) {
         const qAtt = query(collection(db, 'attendance'), where('studentId', '==', studentData.id));
         const qMem = query(collection(db, 'memorization'), where('studentId', '==', studentData.id));
         const qRev = query(collection(db, 'reviews'), where('studentId', '==', studentData.id));
+        const qExams = query(collection(db, 'exams'), where('studentId', '==', studentData.id));
 
-        const [attSnap, memSnap, revSnap] = await Promise.all([
+        const [attSnap, memSnap, revSnap, examsSnap] = await Promise.all([
           getDocs(qAtt),
           getDocs(qMem),
-          getDocs(qRev)
+          getDocs(qRev),
+          getDocs(qExams)
         ]);
 
         const att = attSnap.docs.map(d => d.data()).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
         const mem = memSnap.docs.map(d => d.data()).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
         const rev = revSnap.docs.map(d => d.data()).sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0));
+        const exams = examsSnap.docs.map(d => d.data()).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
         setParentData({
           attendance: att,
           memorization: mem,
-          reviews: rev
+          reviews: rev,
+          exams: exams
         });
 
       } catch (err) {
@@ -81,6 +85,50 @@ function ParentPortal({ studentCode, onLogout }) {
     );
   }
 
+  const getBadges = () => {
+    const badges = [];
+    const progress = calculateProgress(parentData.memorization);
+    
+    // Quran Badges
+    if (progress.totalHizbs >= 60) {
+      badges.push({ id: 'quran-60', title: 'خاتم القرآن', icon: Trophy, color: 'text-yellow-500', bg: 'bg-yellow-50', desc: 'أتم حفظ 60 حزباً' });
+    } else if (progress.totalHizbs >= 30) {
+      badges.push({ id: 'quran-30', title: 'نصف القرآن', icon: Medal, color: 'text-blue-500', bg: 'bg-blue-50', desc: 'أتم حفظ 30 حزباً' });
+    } else if (progress.totalHizbs >= 15) {
+      badges.push({ id: 'quran-15', title: 'ربع القرآن', icon: Medal, color: 'text-purple-500', bg: 'bg-purple-50', desc: 'أتم حفظ 15 حزباً' });
+    } else if (progress.totalHizbs >= 2) {
+      badges.push({ id: 'quran-2', title: 'حافظ جزء', icon: Medal, color: 'text-green-500', bg: 'bg-green-50', desc: 'أتم حفظ جزئين أو أكثر' });
+    }
+
+    // Punctual Badge
+    let consecutiveCount = 0;
+    for (let a of parentData.attendance) {
+      if (a.status === 'present' || a.status === 'late') {
+        consecutiveCount++;
+      } else if (a.status === 'absent') {
+        break; // Streak broken
+      }
+    }
+    if (consecutiveCount >= 10) {
+      badges.push({ id: 'punctual-10', title: 'المواظب', icon: ShieldCheck, color: 'text-emerald-500', bg: 'bg-emerald-50', desc: 'حضور 10 حصص متتالية' });
+    }
+
+    // Excellent Exam Badge
+    if (parentData.exams.some(e => Number(e.score) >= 90)) {
+      badges.push({ id: 'exam-excellent', title: 'الممتاز', icon: Star, color: 'text-orange-500', bg: 'bg-orange-50', desc: 'علامة 90+ في السبر' });
+    }
+
+    // Golden Reviewer Badge
+    const evaluatedRev = parentData.reviews.filter(r => r.status === 'evaluated' || r.status === 'good'); // Considering 'good' as evaluated successfully
+    if (evaluatedRev.length >= 5) {
+      badges.push({ id: 'reviewer-5', title: 'المراجع الذهبي', icon: Target, color: 'text-indigo-500', bg: 'bg-indigo-50', desc: 'أتم 5 مراجعات بنجاح' });
+    }
+
+    return badges;
+  };
+
+  const badges = getBadges();
+
   return (
     <div className="min-h-screen bg-gray-50 rtl p-4 lg:p-8">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -102,6 +150,29 @@ function ParentPortal({ studentCode, onLogout }) {
              خروج
           </button>
         </header>
+
+        {/* Badges Section */}
+        {badges.length > 0 && (
+          <div className="bg-gradient-to-l from-yellow-50/50 to-white rounded-2xl shadow-sm border border-yellow-100 p-6 mb-6">
+            <h4 className="font-bold border-b border-yellow-100 pb-4 mb-4 flex items-center gap-2 text-gray-800">
+              <Award size={20} className="text-yellow-500" />
+              الشارات والإنجازات
+            </h4>
+            <div className="flex flex-wrap gap-4">
+              {badges.map(b => (
+                <div key={b.id} className={`flex items-center gap-3 p-3 rounded-2xl border bg-white shadow-sm hover:shadow-md transition-shadow`}>
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${b.bg} ${b.color}`}>
+                    <b.icon size={24} />
+                  </div>
+                  <div>
+                    <p className={`font-bold text-sm ${b.color}`}>{b.title}</p>
+                    <p className="text-xs text-gray-500">{b.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
            <div className="bg-white p-6 rounded-2xl shadow-sm border text-center">
