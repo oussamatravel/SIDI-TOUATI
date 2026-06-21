@@ -260,11 +260,14 @@ function App() {
   }, []);
 
   const handleInstallClick = async () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setInstallPrompt(null);
+    if (installPrompt) {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setInstallPrompt(null);
+      }
+    } else {
+      alert("لتثبيت التطبيق على هاتفك:\n\n📱 إذا كنت تستخدم أندرويد (Chrome):\nاضغط على قائمة المتصفح (الثلاث نقاط ⋮ بالأعلى) واختر 'إضافة للشاشة الرئيسية' (Add to Home screen).\n\n🍎 إذا كنت تستخدم آيفون (Safari):\nاضغط على زر المشاركة (Share) في أسفل الشاشة، ثم اختر 'إضافة للصفحة الرئيسية' (Add to Home Screen).");
     }
   };
 
