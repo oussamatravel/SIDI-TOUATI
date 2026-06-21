@@ -299,6 +299,29 @@ function App() {
 
   }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, rawMessages, role, user, adminBranchFilter]);
 
+  // Messages Unread Logic
+  const unreadMessagesCount = messages.filter(m => m.readStatus === false && (role === 'admin' ? m.receiverId === 'admin' : (m.receiverId === user?.uid || m.receiverId === 'all'))).length;
+
+  useEffect(() => {
+    if (activeTab === 'messages' && user) {
+      const unread = messages.filter(m => 
+        m.readStatus === false && 
+        (role === 'admin' 
+          ? (m.receiverId === 'admin' && m.senderId === selectedChatUser) 
+          : (m.receiverId === user.uid || m.receiverId === 'all')
+        )
+      );
+      
+      unread.forEach(async (msg) => {
+        try {
+          await updateDoc(doc(db, "messages", msg.id), { readStatus: true });
+        } catch (error) {
+          console.error("Error marking read:", error);
+        }
+      });
+    }
+  }, [activeTab, messages, selectedChatUser, role, user]);
+
   if (!user && !unauthParentCode) {
     return <Login onParentLogin={setUnauthParentCode} />;
   }
@@ -308,6 +331,16 @@ function App() {
   }
 
   // Handlers
+  const handleDeleteMessage = async (msgId) => {
+    if (!window.confirm("هل أنت متأكد من حذف هذه الرسالة نهائياً؟")) return;
+    try {
+      await deleteDoc(doc(db, "messages", msgId));
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      alert("خطأ في حذف الرسالة");
+    }
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
@@ -733,16 +766,26 @@ function App() {
                   displayMessages.map(msg => {
                     const isMine = msg.senderId === user.uid;
                     return (
-                      <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                      <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'} items-center gap-2 group`}>
+                        {role === 'admin' && !isMine && (
+                          <button onClick={() => handleDeleteMessage(msg.id)} title="حذف الرسالة" className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                         <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${isMine ? 'bg-primary text-white rounded-tr-sm' : 'bg-white border text-gray-800 rounded-tl-sm shadow-sm'}`}>
                           {!isMine && msg.receiverId === 'all' && role !== 'admin' && (
                             <div className="text-xs text-primary font-bold mb-1">الإدارة (إعلان)</div>
                           )}
                           <p className="whitespace-pre-wrap">{msg.content}</p>
-                          <div className={`text-[10px] mt-1 ${isMine ? 'text-white/70' : 'text-gray-400'}`}>
-                            {new Date(msg.timestamp).toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})}
+                          <div className={`text-[10px] mt-1 flex items-center justify-between ${isMine ? 'text-white/70' : 'text-gray-400'}`}>
+                            <span>{new Date(msg.timestamp).toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})}</span>
                           </div>
                         </div>
+                        {role === 'admin' && isMine && (
+                          <button onClick={() => handleDeleteMessage(msg.id)} title="حذف الرسالة" className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     );
                   })
@@ -1190,6 +1233,16 @@ function App() {
         });
       }
     });
+
+    // Rule 4: Unread Messages
+    if (unreadMessagesCount > 0) {
+      smartNotifications.push({
+        id: `msg-unread`,
+        type: 'message',
+        priority: 'high',
+        message: `لديك ${unreadMessagesCount} رسالة جديدة غير مقروءة. يرجى مراجعة صندوق الرسائل.`
+      });
+    }
 
     // Sort by priority (high first)
     smartNotifications.sort((a, b) => (a.priority === 'high' ? -1 : 1));
@@ -2777,30 +2830,6 @@ function App() {
       default: return renderDashboard();
     }
   };
-
-  // Messages Unread Logic
-  const unreadMessagesCount = messages.filter(m => m.readStatus === false && (role === 'admin' ? m.receiverId === 'admin' : (m.receiverId === user?.uid || m.receiverId === 'all'))).length;
-
-  useEffect(() => {
-    if (activeTab === 'messages' && user) {
-      const unread = messages.filter(m => 
-        m.readStatus === false && 
-        (role === 'admin' 
-          ? (m.receiverId === 'admin' && m.senderId === selectedChatUser) 
-          : (m.receiverId === user.uid || m.receiverId === 'all')
-        )
-      );
-      
-      unread.forEach(async (msg) => {
-        try {
-          await updateDoc(doc(db, "messages", msg.id), { readStatus: true });
-        } catch (error) {
-          console.error("Error marking read:", error);
-        }
-      });
-    }
-  }, [activeTab, messages, selectedChatUser, role, user]);
-
   return (
     <div className="flex flex-col lg:flex-row min-h-screen">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} unreadMessagesCount={unreadMessagesCount} />

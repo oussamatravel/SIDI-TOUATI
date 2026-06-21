@@ -51,7 +51,7 @@ function ParentPortal({ studentCode, onLogout }) {
 
       } catch (err) {
         console.error("Error fetching parent portal data", err);
-        setError('حدث خطأ أثناء جلب البيانات');
+        setError('حدث خطأ: ' + (err.message || 'غير معروف'));
       } finally {
         setLoading(false);
       }
