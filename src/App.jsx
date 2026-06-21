@@ -1230,13 +1230,13 @@ function App() {
         noExamDays = Math.floor((today - createdAt) / (1000 * 60 * 60 * 24));
       }
 
-      if (noExamDays > 30) {
+      if (noExamDays > 90) {
         smartNotifications.push({
           id: `exam-${student.id}`,
           type: 'exam',
           priority: 'medium',
           studentId: student.id,
-          message: `الطالب ${student.name} لم يتم امتحانه (سبر) منذ أكثر من شهر.`
+          message: `الطالب ${student.name} لم يتم امتحانه (سبر) منذ 3 أشهر.`
         });
       }
     });
