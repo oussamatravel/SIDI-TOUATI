@@ -2614,6 +2614,32 @@ function App() {
 
             <VisualQuran progressSurahs={calculateProgress(parentData.memorization).surahs} />
 
+            {(() => {
+               const badges = getStudentBadges(selectedParentStudent.id);
+               if (badges.length === 0) return null;
+               return (
+                 <div className="card border-t-4 border-t-yellow-400 bg-gradient-to-l from-yellow-50/50 to-white">
+                   <h4 className="font-bold border-b pb-4 mb-4 flex items-center gap-2 text-gray-800">
+                     <Award size={20} className="text-yellow-500" />
+                     الشارات والإنجازات
+                   </h4>
+                   <div className="flex flex-wrap gap-4">
+                     {badges.map(b => (
+                       <div key={b.id} className="flex items-center gap-3 p-3 rounded-2xl border bg-white shadow-sm">
+                         <div className={`w-12 h-12 rounded-full flex items-center justify-center ${b.bg} ${b.color}`}>
+                           <b.icon size={24} />
+                         </div>
+                         <div>
+                           <p className={`font-bold text-sm ${b.color}`}>{b.title}</p>
+                           <p className="text-xs text-gray-500">{b.desc}</p>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               );
+            })()}
+
             <div className="card">
                <h4 className="font-bold border-b pb-2 mb-4">سجل الحفظ</h4>
                <div className="space-y-4 max-h-64 overflow-y-auto">
