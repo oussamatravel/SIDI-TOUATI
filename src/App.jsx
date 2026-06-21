@@ -42,7 +42,7 @@ import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHi
 import { db, auth as primaryAuth, firebaseConfig } from './firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { 
   collection, 
   addDoc, 
@@ -692,18 +692,36 @@ function App() {
     // Convert to JSON string
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     
-    // Create a virtual link and trigger download
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `quran_backup_${format(new Date(), 'yyyy-MM-dd')}.json`);
-    document.body.appendChild(downloadAnchorNode); // required for firefox
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-  };
-
-  const handleExportToExcel = () => {
+    // Create   const handleExportToExcel = () => {
     const wb = XLSX.utils.book_new();
     wb.Workbook = { Views: [{ RTL: true }] }; // Set right-to-left for Arabic
+
+    // Helper to style sheets
+    const applySheetStyles = (ws, colWidths) => {
+      if (colWidths) ws['!cols'] = colWidths.map(w => ({ wch: w }));
+      for (const key in ws) {
+        if (key[0] === '!') continue;
+        const cell = ws[key];
+        const rowIndex = key.replace(/[^\d]/g, '');
+        
+        cell.s = {
+          font: { name: "Arial", sz: 12 },
+          alignment: { vertical: "center", horizontal: "center", wrapText: true },
+          border: {
+            top: { style: "thin", color: { auto: 1 } },
+            bottom: { style: "thin", color: { auto: 1 } },
+            left: { style: "thin", color: { auto: 1 } },
+            right: { style: "thin", color: { auto: 1 } }
+          }
+        };
+
+        if (rowIndex === '1') { // Header Row
+          cell.s.font.bold = true;
+          cell.s.font.color = { rgb: "FFFFFF" };
+          cell.s.fill = { fgColor: { rgb: "10B981" } }; // Green theme
+        }
+      }
+    };
 
     // 1. Students Sheet
     const studentsData = students.map(s => {
@@ -719,6 +737,7 @@ function App() {
       };
     });
     const wsStudents = XLSX.utils.json_to_sheet(studentsData);
+    applySheetStyles(wsStudents, [25, 10, 20, 15, 15, 15, 20]);
     XLSX.utils.book_append_sheet(wb, wsStudents, "الطلاب");
 
     // 2. Attendance Sheets (Grouped by Month)
@@ -750,6 +769,9 @@ function App() {
       
       if (monthData.length > 0) {
         const wsMonth = XLSX.utils.json_to_sheet(monthData);
+        // Column widths: first column 25 (Student), others 12 (Dates)
+        const widths = [25, ...datesInMonth.map(() => 12)];
+        applySheetStyles(wsMonth, widths);
         XLSX.utils.book_append_sheet(wb, wsMonth, `حضور ${monthKey}`);
       }
     });
@@ -780,9 +802,13 @@ function App() {
       
       if (monthData.length > 0) {
         const wsMonth = XLSX.utils.json_to_sheet(monthData);
+        // Column widths: first column 25 (Student), others 20 (Exam Details)
+        const widths = [25, ...datesInMonth.map(() => 20)];
+        applySheetStyles(wsMonth, widths);
         XLSX.utils.book_append_sheet(wb, wsMonth, `امتحانات ${monthKey}`);
       }
     });
+
     // Generate Excel File
     let fileNameSuffix = adminBranchFilter === 'All' ? 'شامل' : adminBranchFilter;
     if (adminTeacherFilter !== 'All') {
