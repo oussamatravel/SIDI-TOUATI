@@ -413,17 +413,16 @@ function App() {
     try {
       const studentData = {
         ...newStudent,
-        // If admin, use the selected teacherId from form, else use own uid
         teacherId: (role === 'admin' && newStudent.teacherId) ? newStudent.teacherId : user.uid,
         branch: newStudent.branch || SCHOOL_BRANCHES[0],
         updatedAt: new Date().toISOString()
       };
 
       if (editingStudent) {
-        await updateDoc(doc(db, "students", editingStudent.id), studentData);
+        updateDoc(doc(db, "students", editingStudent.id), studentData);
         alert("تم تحديث بيانات الطالب بنجاح");
       } else {
-        await addDoc(collection(db, "students"), {
+        addDoc(collection(db, "students"), {
           ...studentData,
           createdAt: new Date().toISOString()
         });
@@ -457,13 +456,13 @@ function App() {
     try {
       if (existing) {
         // Teacher is updating attendance for the selected date
-        await updateDoc(doc(db, "attendance", existing.id), { 
+        updateDoc(doc(db, "attendance", existing.id), { 
           status, 
           timestamp: new Date().toISOString() 
         });
       } else {
         // Creating a new attendance record for the selected date
-        await addDoc(collection(db, "attendance"), {
+        addDoc(collection(db, "attendance"), {
           studentId,
           status,
           date: targetDate,
@@ -492,10 +491,8 @@ function App() {
           return;
         }
         
-        const promises = [];
         for (let h = from; h <= to; h++) {
-          promises.push(
-            addDoc(collection(db, "memorization"), {
+          addDoc(collection(db, "memorization"), {
               studentId: newMemo.studentId,
               surah: null,
               fromAyah: null,
@@ -506,12 +503,11 @@ function App() {
               teacherId: user.uid,
               date: new Date().toISOString(),
               notes: newMemo.notes || ''
-            })
-          );
+            });
         }
-        await Promise.all(promises);
+        alert("تم حفظ سجل التسميع بنجاح");
       } else {
-        await addDoc(collection(db, "memorization"), {
+        addDoc(collection(db, "memorization"), {
           studentId: newMemo.studentId,
           surah: newMemo.memoType === 'surah' ? newMemo.surah : null,
           fromAyah: newMemo.memoType === 'surah' ? Number(newMemo.fromAyah) : null,
@@ -523,9 +519,9 @@ function App() {
           date: new Date().toISOString(),
           notes: newMemo.notes || ''
         });
+        alert("تم حفظ سجل التسميع بنجاح");
       }
       setNewMemo({ studentId: '', surah: '', fromAyah: '', toAyah: '', status: 'good', isFullSurah: false, memoType: 'surah', hizb: '', fromHizbRange: '', toHizbRange: '', notes: '' });
-      alert("تم حفظ سجل التسميع بنجاح");
     } catch (error) {
       console.error("Memo Error:", error);
     }
@@ -585,7 +581,7 @@ function App() {
         date: new Date().toISOString(),
         teacherName: user.name || user.email || 'المعلم'
       });
-      await updateDoc(doc(db, "students", studentId), { parentRemarks: updatedRemarks });
+      updateDoc(doc(db, "students", studentId), { parentRemarks: updatedRemarks });
       setNewRemark('');
     } catch (error) {
       console.error("Error adding remark:", error);
@@ -601,7 +597,7 @@ function App() {
     if (!newExam.score) return;
 
     try {
-      await addDoc(collection(db, "exams"), {
+      addDoc(collection(db, "exams"), {
         studentId: newExam.studentId,
         examType: newExam.examType,
         surah: newExam.examType === 'surah' ? newExam.surah : null,
