@@ -10,7 +10,8 @@ import {
   Shield,
   RefreshCw,
   MessageSquare,
-  FileText
+  FileText,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
