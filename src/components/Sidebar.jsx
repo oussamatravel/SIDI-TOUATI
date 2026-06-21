@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const Sidebar = ({ activeTab, setActiveTab, unreadMessagesCount = 0 }) => {
+const Sidebar = ({ activeTab, setActiveTab, unreadMessagesCount = 0, installPrompt, onInstallClick }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { role } = useAuth();
 
@@ -97,6 +97,15 @@ const Sidebar = ({ activeTab, setActiveTab, unreadMessagesCount = 0 }) => {
           </nav>
 
           <div className="p-4 border-t text-center text-xs text-gray-400">
+            {installPrompt && (
+              <button 
+                onClick={onInstallClick}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-3 rounded-xl mb-4 shadow hover:shadow-lg transition-all text-sm font-bold animate-pulse"
+              >
+                <Download size={18} />
+                تثبيت التطبيق
+              </button>
+            )}
             نسخة المعلم v1.0
           </div>
         </div>

@@ -3176,7 +3176,13 @@ function App() {
   };
   return (
     <div className="flex flex-col lg:flex-row min-h-screen">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} unreadMessagesCount={unreadMessagesCount} />
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        unreadMessagesCount={unreadMessagesCount} 
+        installPrompt={installPrompt}
+        onInstallClick={handleInstallClick}
+      />
       
       <main className="flex-1 p-4 lg:p-8 overflow-hidden">
         <header className="mb-8 flex justify-between items-center lg:items-start">
@@ -3195,16 +3201,7 @@ function App() {
               أهلاً بك {user?.name || (role === 'admin' ? 'أيها المسؤول' : 'يا معلم')}
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-4 mt-4 lg:mt-0">
-            {installPrompt && (
-              <button 
-                onClick={handleInstallClick}
-                className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 rounded-lg shadow hover:shadow-lg transition-all text-sm font-bold animate-pulse"
-              >
-                <Download size={18} />
-                تثبيت التطبيق
-              </button>
-            )}
+          <div className="flex items-center gap-4">
             <button 
               onClick={logout}
               className="flex items-center gap-2 text-red-500 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors text-sm"
