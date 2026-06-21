@@ -130,6 +130,8 @@ function App() {
     isFullSurah: false,
     memoType: 'surah',
     hizb: '',
+    fromHizbRange: '',
+    toHizbRange: '',
     notes: ''
   });
 
@@ -457,21 +459,50 @@ function App() {
     if (!newMemo.studentId) return;
     if (newMemo.memoType === 'surah' && !newMemo.surah) return;
     if (newMemo.memoType === 'hizb' && !newMemo.hizb) return;
+    if (newMemo.memoType === 'hizb_range' && (!newMemo.fromHizbRange || !newMemo.toHizbRange)) return;
     
     try {
-      await addDoc(collection(db, "memorization"), {
-        studentId: newMemo.studentId,
-        surah: newMemo.memoType === 'surah' ? newMemo.surah : null,
-        fromAyah: newMemo.memoType === 'surah' ? Number(newMemo.fromAyah) : null,
-        toAyah: newMemo.memoType === 'surah' ? Number(newMemo.toAyah) : null,
-        hizb: newMemo.memoType === 'hizb' ? Number(newMemo.hizb) : null,
-        memoType: newMemo.memoType,
-        status: newMemo.status,
-        teacherId: user.uid,
-        date: new Date().toISOString(),
-        notes: newMemo.notes || ''
-      });
-      setNewMemo({ studentId: '', surah: '', fromAyah: '', toAyah: '', status: 'good', isFullSurah: false, memoType: 'surah', hizb: '', notes: '' });
+      if (newMemo.memoType === 'hizb_range') {
+        const from = parseInt(newMemo.fromHizbRange, 10);
+        const to = parseInt(newMemo.toHizbRange, 10);
+        if (from > to) {
+          alert("تأكد أن الحزب الأول أصغر أو يساوي الحزب الثاني");
+          return;
+        }
+        
+        const promises = [];
+        for (let h = from; h <= to; h++) {
+          promises.push(
+            addDoc(collection(db, "memorization"), {
+              studentId: newMemo.studentId,
+              surah: null,
+              fromAyah: null,
+              toAyah: null,
+              hizb: h,
+              memoType: 'hizb', // Save individually as hizb for progress tracking
+              status: newMemo.status,
+              teacherId: user.uid,
+              date: new Date().toISOString(),
+              notes: newMemo.notes || ''
+            })
+          );
+        }
+        await Promise.all(promises);
+      } else {
+        await addDoc(collection(db, "memorization"), {
+          studentId: newMemo.studentId,
+          surah: newMemo.memoType === 'surah' ? newMemo.surah : null,
+          fromAyah: newMemo.memoType === 'surah' ? Number(newMemo.fromAyah) : null,
+          toAyah: newMemo.memoType === 'surah' ? Number(newMemo.toAyah) : null,
+          hizb: newMemo.memoType === 'hizb' ? Number(newMemo.hizb) : null,
+          memoType: newMemo.memoType,
+          status: newMemo.status,
+          teacherId: user.uid,
+          date: new Date().toISOString(),
+          notes: newMemo.notes || ''
+        });
+      }
+      setNewMemo({ studentId: '', surah: '', fromAyah: '', toAyah: '', status: 'good', isFullSurah: false, memoType: 'surah', hizb: '', fromHizbRange: '', toHizbRange: '', notes: '' });
       alert("تم حفظ سجل التسميع بنجاح");
     } catch (error) {
       console.error("Memo Error:", error);
@@ -2024,6 +2055,11 @@ function App() {
                      onClick={() => setNewMemo({...newMemo, memoType: 'hizb'})}
                      className={`flex-1 py-1 text-sm rounded-md transition-all ${newMemo.memoType === 'hizb' ? 'bg-white shadow text-primary font-bold' : 'text-gray-500 hover:bg-gray-200'}`}
                    >حزب</button>
+                   <button 
+                     type="button"
+                     onClick={() => setNewMemo({...newMemo, memoType: 'hizb_range'})}
+                     className={`flex-1 py-1 text-sm rounded-md transition-all ${newMemo.memoType === 'hizb_range' ? 'bg-white shadow text-primary font-bold' : 'text-gray-500 hover:bg-gray-200'}`}
+                   >مجموعة أحزاب</button>
                 </div>
                 <form onSubmit={handleMemoSubmit} className="space-y-4">
                    <div className="space-y-1">
@@ -2102,7 +2138,7 @@ function App() {
                           </div>
                        </div>
                      </>
-                   ) : (
+                   ) : newMemo.memoType === 'hizb' ? (
                      <div className="space-y-1">
                         <label className="text-sm font-medium">رقم الحزب</label>
                         <select 
@@ -2123,6 +2159,33 @@ function App() {
                               );
                            })}
                         </select>
+                     </div>
+                   ) : (
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                           <label className="text-sm font-medium">من الحزب</label>
+                           <select 
+                             required
+                             value={newMemo.fromHizbRange}
+                             onChange={e => setNewMemo({...newMemo, fromHizbRange: e.target.value})}
+                             className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"
+                           >
+                              <option value="">-- البداية --</option>
+                              {Array.from({length: 60}, (_, i) => i + 1).map(h => <option key={h} value={h}>{h}</option>)}
+                           </select>
+                        </div>
+                        <div className="space-y-1">
+                           <label className="text-sm font-medium">إلى الحزب</label>
+                           <select 
+                             required
+                             value={newMemo.toHizbRange}
+                             onChange={e => setNewMemo({...newMemo, toHizbRange: e.target.value})}
+                             className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"
+                           >
+                              <option value="">-- النهاية --</option>
+                              {Array.from({length: 60}, (_, i) => i + 1).map(h => <option key={h} value={h}>{h}</option>)}
+                           </select>
+                        </div>
                      </div>
                    )}
 
