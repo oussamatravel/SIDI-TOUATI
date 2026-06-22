@@ -129,7 +129,7 @@ function App() {
     branch: SCHOOL_BRANCHES[0],
     level: STUDENT_LEVELS[0],
     role: 'teacher',
-    supervisedLevel: STUDENT_LEVELS[0]
+    supervisedLevel: [STUDENT_LEVELS[0]]
   });
 
   const [showTeacherRemarkModal, setShowTeacherRemarkModal] = useState(false);
@@ -194,7 +194,12 @@ function App() {
     let q = query(collection(db, "students"));
     // Filter students
     if (role === 'supervisor') {
-      q = query(collection(db, "students"), where("level", "==", user.supervisedLevel));
+      const levels = Array.isArray(user.supervisedLevel) ? user.supervisedLevel : (user.supervisedLevel ? [user.supervisedLevel] : []);
+      if (levels.length > 0) {
+        q = query(collection(db, "students"), where("level", "in", levels));
+      } else {
+        q = query(collection(db, "students"), where("level", "in", ["__NONE__"]));
+      }
     } else if (role !== 'admin') {
       q = query(collection(db, "students"), where("teacherId", "==", user.uid));
     }
@@ -260,7 +265,8 @@ function App() {
       unsubscribeTeach = onSnapshot(qT, (snapshot) => {
         let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         if (role === 'supervisor') {
-          docs = docs.filter(d => d.level === user.supervisedLevel || d.id === user.uid);
+          const levels = Array.isArray(user.supervisedLevel) ? user.supervisedLevel : (user.supervisedLevel ? [user.supervisedLevel] : []);
+          docs = docs.filter(d => levels.includes(d.level) || d.id === user.uid);
         }
         setRawTeachers(docs);
       });
@@ -733,7 +739,7 @@ function App() {
       }
       
       setEditingTeacher(null);
-      setNewTeacher({ name: '', email: '', password: '', branch: SCHOOL_BRANCHES[0], level: STUDENT_LEVELS[0], role: 'teacher', supervisedLevel: STUDENT_LEVELS[0] });
+      setNewTeacher({ name: '', email: '', password: '', branch: SCHOOL_BRANCHES[0], level: STUDENT_LEVELS[0], role: 'teacher', supervisedLevel: [STUDENT_LEVELS[0]] });
     } catch (error) {
       console.error("Teacher Saving Error:", error);
       alert("خطأ: " + error.message);
@@ -3138,17 +3144,28 @@ function App() {
                       </select>
                    </div>
                    {newTeacher.role === 'supervisor' ? (
-                     <div className="space-y-1">
-                        <label className="text-sm font-medium">القسم المشرف عليه</label>
-                        <select
-                          value={newTeacher.supervisedLevel}
-                          onChange={e => setNewTeacher({...newTeacher, supervisedLevel: e.target.value})}
-                          className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
-                        >
+                     <div className="space-y-2">
+                        <label className="text-sm font-medium">الأقسام المشرف عليها</label>
+                        <div className="grid grid-cols-2 gap-2">
                            {STUDENT_LEVELS.map(level => (
-                             <option key={level} value={level}>{level}</option>
+                             <label key={level} className="flex items-center gap-2 text-sm bg-gray-50 p-2 rounded-lg border cursor-pointer hover:bg-green-50 transition-colors">
+                               <input 
+                                 type="checkbox" 
+                                 checked={newTeacher.supervisedLevel?.includes(level)}
+                                 onChange={(e) => {
+                                   const checked = e.target.checked;
+                                   const current = newTeacher.supervisedLevel || [];
+                                   setNewTeacher({
+                                     ...newTeacher,
+                                     supervisedLevel: checked ? [...current, level] : current.filter(l => l !== level)
+                                   });
+                                 }}
+                                 className="w-4 h-4 text-primary rounded border-gray-300"
+                               />
+                               {level}
+                             </label>
                            ))}
-                        </select>
+                        </div>
                      </div>
                    ) : (
                      <div className="space-y-1">
@@ -3251,7 +3268,7 @@ function App() {
                               <td className="py-4 pr-2">
                                  <div className="text-xs font-bold text-primary">{t.branch || 'Ecole Edimco'}</div>
                                  <div className="text-xs text-gray-500 mt-1">
-                                   {t.role === 'supervisor' ? t.supervisedLevel : t.level || 'غير محدد'}
+                                   {t.role === 'supervisor' ? (Array.isArray(t.supervisedLevel) ? t.supervisedLevel.join(" - ") : t.supervisedLevel) : t.level || 'غير محدد'}
                                  </div>
                               </td>
                               <td className="py-4 pr-2 text-xs text-gray-400">
@@ -3279,7 +3296,7 @@ function App() {
                                            branch: t.branch || SCHOOL_BRANCHES[0], 
                                            level: t.level || STUDENT_LEVELS[0],
                                            role: t.role || 'teacher',
-                                           supervisedLevel: t.supervisedLevel || STUDENT_LEVELS[0],
+                                           supervisedLevel: Array.isArray(t.supervisedLevel) ? t.supervisedLevel : (t.supervisedLevel ? [t.supervisedLevel] : [STUDENT_LEVELS[0]]),
                                            password: '' 
                                          });
                                           // Scroll to top where the form is
