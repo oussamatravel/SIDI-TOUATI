@@ -1890,8 +1890,8 @@ function App() {
             .filter(s => role !== 'admin' || studentTabTeacherFilter === 'All' || s.teacherId === studentTabTeacherFilter)
             .filter(s => studentTabLevelFilter === 'All' || s.level === studentTabLevelFilter)
             .filter(s => 
-              s.name.includes(studentSearch) || 
-              (s.code && s.code.includes(studentSearch))
+              (s.name || '').includes(studentSearch) || 
+              (s.code || '').includes(studentSearch)
             )
             .map(student => {
             const prog = calculateStudentProgress(student.id);
@@ -3151,10 +3151,10 @@ function App() {
                              <label key={level} className="flex items-center gap-2 text-sm bg-gray-50 p-2 rounded-lg border cursor-pointer hover:bg-green-50 transition-colors">
                                <input 
                                  type="checkbox" 
-                                 checked={newTeacher.supervisedLevel?.includes(level)}
+                                 checked={Array.isArray(newTeacher.supervisedLevel) ? newTeacher.supervisedLevel.includes(level) : newTeacher.supervisedLevel === level}
                                  onChange={(e) => {
                                    const checked = e.target.checked;
-                                   const current = newTeacher.supervisedLevel || [];
+                                   const current = Array.isArray(newTeacher.supervisedLevel) ? newTeacher.supervisedLevel : (newTeacher.supervisedLevel ? [newTeacher.supervisedLevel] : []);
                                    setNewTeacher({
                                      ...newTeacher,
                                      supervisedLevel: checked ? [...current, level] : current.filter(l => l !== level)
