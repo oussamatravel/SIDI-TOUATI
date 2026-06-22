@@ -345,6 +345,7 @@ function App() {
       }
     } else {
       setStudents(currentStudents); // For teachers, it's already filtered by teacherId in Firestore query
+      if (role === 'supervisor') setTeachers(rawTeachers);
       const myStudentIds = currentStudents.map(s => s.id);
       
       const filteredAtt = rawAttendance.filter(a => a.teacherId === user.uid || myStudentIds.includes(a.studentId));
@@ -375,7 +376,7 @@ function App() {
 
     // Filter teacher remarks
     if (role === 'admin' || role === 'supervisor') {
-      const currentTeacherIds = currentTeachers.map(t => t.id);
+      const currentTeacherIds = rawTeachers.map(t => t.id);
       setTeacherRemarks(rawTeacherRemarks.filter(r => currentTeacherIds.includes(r.teacherId)));
     }
 
