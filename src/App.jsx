@@ -3,7 +3,7 @@ import Sidebar from './components/Sidebar';
 import Login from './components/Login';
 import { useAuth } from './context/AuthContext';
 import { SURAH_LIST } from './constants/surahs';
-import { calculateProgress } from './utils/progressCalculator';
+import { calculateProgress, getHizbDisplayString } from './utils/progressCalculator';
 import VisualQuran from './components/VisualQuran';
 import { 
   Users, 
@@ -39,6 +39,7 @@ import {
   Trophy
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
+import { ATHMAN_STARTS } from './constants/athmanData';
 import { db, auth as primaryAuth, firebaseConfig } from './firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -59,9 +60,10 @@ import {
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import ParentPortal from './components/ParentPortal';
+import PraiseCard from './components/PraiseCard';
 
 export const SCHOOL_BRANCHES = ['Ecole Edimco', 'Ecole Ighil Elbordj', 'Ecole Ritaj'];
-export const STUDENT_LEVELS = ['تحضيري', 'ابتدائي', 'متوسط', 'ثانوي', 'كبار'];
+export const STUDENT_LEVELS = ['ما قبل التمدرس', 'ابتدائي', 'متوسط', 'ثانوي', 'كبار', 'محو الأمية', 'العلوم الشرعية', 'الإجازة'];
 
 function App() {
   const { user, role, logout } = useAuth();
@@ -101,16 +103,19 @@ function App() {
 
   // Form States
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showPraiseCard, setShowPraiseCard] = useState(null);
   const [editingStudent, setEditingStudent] = useState(null);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [newStudent, setNewStudent] = useState({
     name: '',
-    age: '',
+    birthDate: '',
     level: 'ابتدائي',
     branch: SCHOOL_BRANCHES[0],
     parentName: '',
     parentEmail: '',
-    phone: '',
+    fatherPhone: '',
+    motherPhone: '',
+    spousePhone: '',
     notes: '',
     code: Math.random().toString(36).substring(2, 8).toUpperCase()
   });
@@ -133,6 +138,8 @@ function App() {
     hizb: '',
     fromHizbRange: '',
     toHizbRange: '',
+    fromThuman: '1',
+    toThuman: '8',
     notes: ''
   });
 
@@ -143,6 +150,8 @@ function App() {
     fromAyah: '',
     toAyah: '',
     hizb: '',
+    fromThuman: '1',
+    toThuman: '8',
     isFullSurah: false,
     status: 'good'
   });
@@ -432,12 +441,14 @@ function App() {
       setEditingStudent(null);
       setNewStudent({ 
         name: '', 
-        age: '', 
+        birthDate: '', 
         level: 'ابتدائي',
         branch: user?.branch || SCHOOL_BRANCHES[0],
         parentName: '', 
         parentEmail: '',
-        phone: '', 
+        fatherPhone: '', 
+        motherPhone: '',
+        spousePhone: '',
         notes: '', 
         teacherId: '',
         code: Math.random().toString(36).substring(2, 8).toUpperCase() 
@@ -498,6 +509,8 @@ function App() {
               fromAyah: null,
               toAyah: null,
               hizb: h,
+              fromThuman: 1, // Range saves full hizb
+              toThuman: 8,
               memoType: 'hizb', // Save individually as hizb for progress tracking
               status: newMemo.status,
               teacherId: user.uid,
@@ -513,6 +526,8 @@ function App() {
           fromAyah: newMemo.memoType === 'surah' ? Number(newMemo.fromAyah) : null,
           toAyah: newMemo.memoType === 'surah' ? Number(newMemo.toAyah) : null,
           hizb: newMemo.memoType === 'hizb' ? Number(newMemo.hizb) : null,
+          fromThuman: newMemo.memoType === 'hizb' ? Number(newMemo.fromThuman) : null,
+          toThuman: newMemo.memoType === 'hizb' ? Number(newMemo.toThuman) : null,
           memoType: newMemo.memoType,
           status: newMemo.status,
           teacherId: user.uid,
@@ -521,7 +536,7 @@ function App() {
         });
         alert("تم حفظ سجل التسميع بنجاح");
       }
-      setNewMemo({ studentId: '', surah: '', fromAyah: '', toAyah: '', status: 'good', isFullSurah: false, memoType: 'surah', hizb: '', fromHizbRange: '', toHizbRange: '', notes: '' });
+      setNewMemo({ studentId: '', surah: '', fromAyah: '', toAyah: '', status: 'good', isFullSurah: false, memoType: 'surah', hizb: '', fromHizbRange: '', toHizbRange: '', fromThuman: '1', toThuman: '8', notes: '' });
     } catch (error) {
       console.error("Memo Error:", error);
     }
@@ -540,13 +555,15 @@ function App() {
         fromAyah: newReview.memoType === 'surah' ? Number(newReview.fromAyah) : null,
         toAyah: newReview.memoType === 'surah' ? Number(newReview.toAyah) : null,
         hizb: newReview.memoType === 'hizb' ? Number(newReview.hizb) : null,
+        fromThuman: newReview.memoType === 'hizb' ? Number(newReview.fromThuman) : null,
+        toThuman: newReview.memoType === 'hizb' ? Number(newReview.toThuman) : null,
         memoType: newReview.memoType,
         status: 'pending', // Initial status
         teacherId: user.uid,
         assignedDate: new Date().toISOString(),
         completedDate: null
       });
-      setNewReview({ studentId: '', surah: '', fromAyah: '', toAyah: '', isFullSurah: false, memoType: 'surah', hizb: '', status: 'pending' });
+      setNewReview({ studentId: '', surah: '', fromAyah: '', toAyah: '', isFullSurah: false, memoType: 'surah', hizb: '', fromThuman: '1', toThuman: '8', status: 'pending' });
       alert("تم جدولة المراجعة بنجاح");
     } catch (error) {
       console.error("Assign Review Error:", error);
@@ -786,9 +803,13 @@ function App() {
       const p = calculateStudentProgress(s.id);
       return {
         "الاسم": s.name,
-        "العمر": s.age || '',
+        "تاريخ الميلاد": s.birthDate ? new Date(s.birthDate).toLocaleDateString('ar-EG') : (s.age ? `${s.age} سنة` : ''),
         "الفرع": s.branch,
         "المستوى": s.level || '',
+        "ولي الأمر": s.parentName || '',
+        "هاتف الأب": s.fatherPhone || s.phone || '',
+        "هاتف الأم": s.motherPhone || '',
+        "هاتف الزوج/ة": s.spousePhone || '',
         "تاريخ التسجيل": s.createdAt ? new Date(s.createdAt).toLocaleDateString('ar-EG') : '',
         "التقدم العام (%)": `${p.totalPercentage}%`,
         "الأحزاب المحفوظة": p.totalHizbs
@@ -1117,6 +1138,19 @@ function App() {
               <div>
                 <h3 className="text-3xl font-bold">{student.name}</h3>
                 <p className="opacity-80">كود المتابعة: {student.code}</p>
+                {student.birthDate && (
+                  <p className="opacity-70 text-sm">
+                    تاريخ الميلاد: {new Date(student.birthDate).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    {' — '}العمر: {Math.floor((new Date() - new Date(student.birthDate)) / (365.25 * 24 * 60 * 60 * 1000))} سنة
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm opacity-80">
+                  {student.fatherPhone && <span>📞 الأب: {student.fatherPhone}</span>}
+                  {student.motherPhone && <span>📞 الأم: {student.motherPhone}</span>}
+                  {student.spousePhone && <span>📞 الزوج/ة: {student.spousePhone}</span>}
+                  {/* Fallback for old data */}
+                  {!student.fatherPhone && !student.motherPhone && student.phone && <span>📞 {student.phone}</span>}
+                </div>
               </div>
             </div>
             <div className="bg-white/10 px-6 py-4 rounded-2xl text-center">
@@ -1229,7 +1263,7 @@ function App() {
                    {periodMemorization.map((m, i) => (
                       <div key={`m-${i}`} className="text-sm border-b pb-2 last:border-0 hover:bg-gray-50 p-1 rounded">
                          <div className="flex justify-between mb-1">
-                            <span className="font-bold text-blue-700">حفظ: {m.memoType==='hizb'||m.hizb ? `الحزب ${m.hizb}` : m.surah}</span>
+                            <span className="font-bold text-blue-700">حفظ: {m.memoType==='hizb'||m.hizb ? getHizbDisplayString(m) : m.surah}</span>
                             <span className="text-[10px] text-gray-400">{m.date ? new Date(m.date).toLocaleDateString('ar-EG') : ''}</span>
                          </div>
                          <div className="flex justify-between">
@@ -1243,7 +1277,7 @@ function App() {
                    {periodReviews.map((r, i) => (
                       <div key={`r-${i}`} className="text-sm border-b pb-2 last:border-0 hover:bg-orange-50 p-1 rounded bg-orange-50/30">
                          <div className="flex justify-between mb-1">
-                            <span className="font-bold text-orange-700">مراجعة: {r.memoType==='hizb'||r.hizb ? `الحزب ${r.hizb}` : r.surah}</span>
+                            <span className="font-bold text-orange-700">مراجعة: {r.memoType==='hizb'||r.hizb ? getHizbDisplayString(r) : r.surah}</span>
                             <span className="text-[10px] text-gray-400">{r.assignedDate ? new Date(r.assignedDate).toLocaleDateString('ar-EG') : ''}</span>
                          </div>
                          <div className="flex justify-between">
@@ -1637,7 +1671,7 @@ function App() {
                       {students.find(s => s.id === memo.studentId)?.name || 'طالب محذوف'}
                     </span>
                     <span className="text-xs text-gray-500">
-                      {memo.memoType === 'hizb' || memo.hizb ? `الحزب ${memo.hizb}` : `سورة ${memo.surah}`}
+                      {memo.memoType === 'hizb' || memo.hizb ? getHizbDisplayString(memo) : `سورة ${memo.surah}`}
                     </span>
                   </div>
                   <div className="text-right">
@@ -1753,12 +1787,14 @@ function App() {
               setEditingStudent(null);
               setNewStudent({
                 name: '',
-                age: '',
+                birthDate: '',
                 level: 'ابتدائي',
                 branch: user?.branch || SCHOOL_BRANCHES[0],
                 parentName: '',
                 parentEmail: '',
-                phone: '',
+                fatherPhone: '',
+                motherPhone: '',
+                spousePhone: '',
                 notes: '',
                 teacherId: '',
                 code: Math.random().toString(36).substring(2, 8).toUpperCase() 
@@ -1789,7 +1825,9 @@ function App() {
                   <div>
                     <h4 className="font-bold text-lg">{student.name}</h4>
                     <p className="text-sm text-gray-500">
-                      العمر: {student.age} سنة 
+                      {student.birthDate
+                        ? `العمر: ${Math.floor((new Date() - new Date(student.birthDate)) / (365.25 * 24 * 60 * 60 * 1000))} سنة`
+                        : student.age ? `العمر: ${student.age} سنة` : ''}
                       {student.level && ` - ${student.level}`}
                     </p>
                   </div>
@@ -1809,18 +1847,31 @@ function App() {
 
                 <div className="space-y-1 text-sm text-gray-600 mb-4">
                   <p>ولي الأمر: {student.parentName}</p>
-                  <p>الهاتف: {student.phone}</p>
+                  {student.fatherPhone && <p className="text-xs">الأب: {student.fatherPhone}</p>}
+                  {student.motherPhone && <p className="text-xs">الأم: {student.motherPhone}</p>}
+                  {student.spousePhone && <p className="text-xs">زوج / زوجة: {student.spousePhone}</p>}
+                  {/* Fallback for old data */}
+                  {!student.fatherPhone && !student.motherPhone && student.phone && <p>الهاتف: {student.phone}</p>}
                   <p className="text-xs text-primary font-medium">الأحزاب المحفوظة: {prog.totalHizbs}</p>
                 </div>
                 
                 <div className="flex flex-col gap-2 pt-4 border-t">
-                  <button 
-                    onClick={() => setSelectedStudentForDetails(student)}
-                    className="w-full flex items-center justify-center gap-2 py-2 bg-primary/5 text-primary hover:bg-primary/10 rounded-lg transition-colors font-bold text-sm"
-                  >
-                    <BarChart2 size={16} />
-                    عرض مستوى التقدم
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setSelectedStudentForDetails(student)}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 bg-primary/5 text-primary hover:bg-primary/10 rounded-lg transition-colors font-bold text-sm"
+                    >
+                      <BarChart2 size={16} />
+                      التقدم
+                    </button>
+                    <button 
+                      onClick={() => setShowPraiseCard(student)}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 bg-yellow-50 text-yellow-600 hover:bg-yellow-100 rounded-lg transition-colors font-bold text-sm"
+                    >
+                      <Star size={16} />
+                      استحسان
+                    </button>
+                  </div>
                   <div className="flex gap-2">
                     <button 
                       onClick={() => {
@@ -1874,11 +1925,11 @@ function App() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-sm font-medium">العمر</label>
+                    <label className="text-sm font-medium">تاريخ الميلاد</label>
                     <input 
-                      type="number"
-                      value={newStudent.age}
-                      onChange={e => setNewStudent({...newStudent, age: e.target.value})}
+                      type="date"
+                      value={newStudent.birthDate || ''}
+                      onChange={e => setNewStudent({...newStudent, birthDate: e.target.value})}
                       className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none" 
                     />
                   </div>
@@ -1921,13 +1972,38 @@ function App() {
                     placeholder="example@mail.com"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">رقم الهاتف</label>
-                  <input 
-                    value={newStudent.phone}
-                    onChange={e => setNewStudent({...newStudent, phone: e.target.value})}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none" 
-                  />
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold text-gray-600 border-b pb-1">أرقام الاتصال</p>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">رقم الأب</label>
+                    <input 
+                      type="tel"
+                      value={newStudent.fatherPhone || ''}
+                      onChange={e => setNewStudent({...newStudent, fatherPhone: e.target.value})}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                      placeholder="0XX XX XX XX XX"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">رقم الأم</label>
+                    <input 
+                      type="tel"
+                      value={newStudent.motherPhone || ''}
+                      onChange={e => setNewStudent({...newStudent, motherPhone: e.target.value})}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                      placeholder="0XX XX XX XX XX"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">رقم الزوج / الزوجة <span className="text-gray-400 text-xs">(اختياري)</span></label>
+                    <input 
+                      type="tel"
+                      value={newStudent.spousePhone || ''}
+                      onChange={e => setNewStudent({...newStudent, spousePhone: e.target.value})}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                      placeholder="0XX XX XX XX XX"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-blue-600">المدرسة (المركز)</label>
@@ -2157,26 +2233,68 @@ function App() {
                        </div>
                      </>
                    ) : newMemo.memoType === 'hizb' ? (
-                     <div className="space-y-1">
-                        <label className="text-sm font-medium">رقم الحزب</label>
-                        <select 
-                          required
-                          value={newMemo.hizb}
-                          onChange={e => setNewMemo({...newMemo, hizb: e.target.value})}
-                          className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"
-                        >
-                           <option value="">-- اختر الحزب --</option>
-                           {Array.from({length: 60}, (_, i) => i + 1).map(h => {
-                              const start = HIZB_STARTS[h-1];
-                              const sData = QURAN_DATA[start[0]-1];
-                               const phrase = HIZB_LABELS[h-1];
-                              return (
-                                <option key={h} value={h}>
-                                   {`الحزب ${h} - ${sData.name} : ${phrase}`}
-                                </option>
-                              );
-                           })}
-                        </select>
+                     <div className="space-y-4">
+                       <div className="space-y-1">
+                          <label className="text-sm font-medium">رقم الحزب</label>
+                          <select 
+                            required
+                            value={newMemo.hizb}
+                            onChange={e => setNewMemo({...newMemo, hizb: e.target.value})}
+                            className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"
+                          >
+                             <option value="">-- اختر الحزب --</option>
+                             {Array.from({length: 60}, (_, i) => i + 1).map(h => {
+                                const start = HIZB_STARTS[h-1];
+                                const sData = QURAN_DATA[start[0]-1];
+                                 const phrase = HIZB_LABELS[h-1];
+                                return (
+                                  <option key={h} value={h}>
+                                     {`الحزب ${h} - ${sData.name} : ${phrase}`}
+                                  </option>
+                                );
+                             })}
+                          </select>
+                       </div>
+                       {newMemo.hizb && (
+                         <div className="grid grid-cols-2 gap-4">
+                           <div className="space-y-1">
+                             <label className="text-sm font-medium">من الثمن</label>
+                             <select 
+                               required
+                               value={newMemo.fromThuman}
+                               onChange={e => setNewMemo({...newMemo, fromThuman: e.target.value})}
+                               className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary text-sm"
+                             >
+                               {Array.from({length: 8}, (_, i) => i + 1).map(t => {
+                                 const globalThumanIndex = ((newMemo.hizb - 1) * 8) + (t - 1);
+                                 return (
+                                   <option key={t} value={t}>
+                                     {`الثمن ${t} - ${ATHMAN_STARTS[globalThumanIndex]}`}
+                                   </option>
+                                 );
+                               })}
+                             </select>
+                           </div>
+                           <div className="space-y-1">
+                             <label className="text-sm font-medium">إلى الثمن</label>
+                             <select 
+                               required
+                               value={newMemo.toThuman}
+                               onChange={e => setNewMemo({...newMemo, toThuman: e.target.value})}
+                               className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary text-sm"
+                             >
+                               {Array.from({length: 8}, (_, i) => i + 1).map(t => {
+                                 const globalThumanIndex = ((newMemo.hizb - 1) * 8) + (t - 1);
+                                 return (
+                                   <option key={t} value={t}>
+                                     {`الثمن ${t} - ${ATHMAN_STARTS[globalThumanIndex]}`}
+                                   </option>
+                                 );
+                               })}
+                             </select>
+                           </div>
+                         </div>
+                       )}
                      </div>
                    ) : (
                      <div className="grid grid-cols-2 gap-4">
@@ -2260,7 +2378,7 @@ function App() {
                             </p>
                             <p className="text-sm font-medium mt-1">
                                {memo.memoType === 'hizb' || memo.hizb ? (
-                                  <span className="text-primary-dark font-bold">الحزب {memo.hizb}</span>
+                                  <span className="text-primary-dark font-bold">{getHizbDisplayString(memo)}</span>
                                ) : (
                                   <>
                                      سورة {memo.surah} 
@@ -2414,26 +2532,68 @@ function App() {
                        </div>
                      </>
                    ) : (
-                     <div className="space-y-1">
-                        <label className="text-sm font-medium">رقم الحزب</label>
-                        <select 
-                          required
-                          value={newReview.hizb}
-                          onChange={e => setNewReview({...newReview, hizb: e.target.value})}
-                          className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"
-                        >
-                           <option value="">-- اختر الحزب --</option>
-                           {Array.from({length: 60}, (_, i) => i + 1).map(h => {
-                              const start = HIZB_STARTS[h-1];
-                              const sData = QURAN_DATA[start[0]-1];
-                              const phrase = HIZB_LABELS[h-1];
-                              return (
-                                <option key={h} value={h}>
-                                   {`الحزب ${h} - ${sData.name} : ${phrase}`}
-                                </option>
-                              );
-                           })}
-                        </select>
+                     <div className="space-y-4">
+                       <div className="space-y-1">
+                          <label className="text-sm font-medium">رقم الحزب</label>
+                          <select 
+                            required
+                            value={newReview.hizb}
+                            onChange={e => setNewReview({...newReview, hizb: e.target.value})}
+                            className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"
+                          >
+                             <option value="">-- اختر الحزب --</option>
+                             {Array.from({length: 60}, (_, i) => i + 1).map(h => {
+                                const start = HIZB_STARTS[h-1];
+                                const sData = QURAN_DATA[start[0]-1];
+                                const phrase = HIZB_LABELS[h-1];
+                                return (
+                                  <option key={h} value={h}>
+                                     {`الحزب ${h} - ${sData.name} : ${phrase}`}
+                                  </option>
+                                );
+                             })}
+                          </select>
+                       </div>
+                       {newReview.hizb && (
+                         <div className="grid grid-cols-2 gap-4">
+                           <div className="space-y-1">
+                             <label className="text-sm font-medium">من الثمن</label>
+                             <select 
+                               required
+                               value={newReview.fromThuman}
+                               onChange={e => setNewReview({...newReview, fromThuman: e.target.value})}
+                               className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary text-sm"
+                             >
+                               {Array.from({length: 8}, (_, i) => i + 1).map(t => {
+                                 const globalThumanIndex = ((newReview.hizb - 1) * 8) + (t - 1);
+                                 return (
+                                   <option key={t} value={t}>
+                                     {`الثمن ${t} - ${ATHMAN_STARTS[globalThumanIndex]}`}
+                                   </option>
+                                 );
+                               })}
+                             </select>
+                           </div>
+                           <div className="space-y-1">
+                             <label className="text-sm font-medium">إلى الثمن</label>
+                             <select 
+                               required
+                               value={newReview.toThuman}
+                               onChange={e => setNewReview({...newReview, toThuman: e.target.value})}
+                               className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary text-sm"
+                             >
+                               {Array.from({length: 8}, (_, i) => i + 1).map(t => {
+                                 const globalThumanIndex = ((newReview.hizb - 1) * 8) + (t - 1);
+                                 return (
+                                   <option key={t} value={t}>
+                                     {`الثمن ${t} - ${ATHMAN_STARTS[globalThumanIndex]}`}
+                                   </option>
+                                 );
+                               })}
+                             </select>
+                           </div>
+                         </div>
+                       )}
                      </div>
                    )}
                    <button type="submit" className="btn-primary w-full py-3 shadow-lg shadow-primary/20 bg-blue-600 hover:bg-blue-700">تعيين مراجعة</button>
@@ -2458,7 +2618,7 @@ function App() {
                               </p>
                               <p className="text-sm font-medium mt-1">
                                  {rev.memoType === 'hizb' || rev.hizb ? (
-                                    <span className="text-primary-dark font-bold">الحزب {rev.hizb}</span>
+                                    <span className="text-primary-dark font-bold">{getHizbDisplayString(rev)}</span>
                                  ) : (
                                     <>
                                        سورة {rev.surah} 
@@ -2513,7 +2673,7 @@ function App() {
                               </p>
                               <p className="text-sm font-medium mt-1">
                                  {rev.memoType === 'hizb' || rev.hizb ? (
-                                    <span className="text-primary-dark font-bold">الحزب {rev.hizb}</span>
+                                    <span className="text-primary-dark font-bold">{getHizbDisplayString(rev)}</span>
                                  ) : (
                                     <>
                                        سورة {rev.surah} 
@@ -2665,7 +2825,7 @@ function App() {
                     <div key={i} className="flex justify-between items-center border-b pb-2 last:border-0">
                        <div>
                           <p className="font-medium text-gray-800">
-                             {m.memoType === 'hizb' || m.hizb ? `الحزب ${m.hizb}` : `سورة ${m.surah}`}
+                             {m.memoType === 'hizb' || m.hizb ? getHizbDisplayString(m) : `سورة ${m.surah}`}
                           </p>
                           <p className="text-xs text-gray-500 mt-1 flex gap-2">
                              <span>{m.memoType === 'hizb' || m.hizb ? '' : `من الآية ${m.fromAyah} إلى ${m.toAyah}`}</span>
@@ -2722,7 +2882,7 @@ function App() {
                     <div key={i} className="flex justify-between items-center border-b pb-2 last:border-0">
                        <div>
                           <p className="font-medium text-primary">
-                             {r.memoType === 'hizb' || r.hizb ? `الحزب ${r.hizb}` : `سورة ${r.surah} (من ${r.fromAyah} إلى ${r.toAyah})`}
+                             {r.memoType === 'hizb' || r.hizb ? getHizbDisplayString(r) : `سورة ${r.surah} (من ${r.fromAyah} إلى ${r.toAyah})`}
                           </p>
                           <p className="text-[10px] text-gray-400">
                              تاريخ: {r.assignedDate ? new Date(r.assignedDate).toLocaleDateString('ar-EG') : '--'}
@@ -3222,6 +3382,12 @@ function App() {
           renderContent()
         )}
       </main>
+      {showPraiseCard && (
+        <PraiseCard 
+          student={showPraiseCard} 
+          onClose={() => setShowPraiseCard(null)} 
+        />
+      )}
     </div>
   );
 }

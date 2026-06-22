@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { UserCircle, LogOut, Calendar, Medal, Star, Target, ShieldCheck, Trophy, Award } from 'lucide-react';
-import { calculateProgress } from '../utils/progressCalculator';
+import { calculateProgress, getHizbDisplayString } from '../utils/progressCalculator';
 import VisualQuran from './VisualQuran';
 
 function ParentPortal({ studentCode, onLogout }) {
@@ -196,7 +196,7 @@ function ParentPortal({ studentCode, onLogout }) {
                 <div key={i} className="flex justify-between items-center border-b pb-3 last:border-0 hover:bg-gray-50 p-2 rounded-lg transition-colors">
                    <div>
                       <p className="font-medium text-primary">
-                         {r.memoType === 'hizb' || r.hizb ? `الحزب ${r.hizb}` : `سورة ${r.surah} (من ${r.fromAyah} إلى ${r.toAyah})`}
+                         {r.memoType === 'hizb' || r.hizb ? getHizbDisplayString(r) : `سورة ${r.surah} (من ${r.fromAyah} إلى ${r.toAyah})`}
                       </p>
                       <p className="text-xs text-gray-400 mt-1">
                          تاريخ التعيين: {r.assignedDate ? new Date(r.assignedDate).toLocaleDateString('ar-EG') : '--'}
@@ -228,7 +228,7 @@ function ParentPortal({ studentCode, onLogout }) {
                 <div key={i} className="flex justify-between items-center border-b pb-3 last:border-0 hover:bg-gray-50 p-2 rounded-lg transition-colors">
                    <div>
                       <p className="font-medium text-gray-800">
-                         {m.memoType === 'hizb' || m.hizb ? `الحزب ${m.hizb}` : `سورة ${m.surah}`}
+                         {m.memoType === 'hizb' || m.hizb ? getHizbDisplayString(m) : `سورة ${m.surah}`}
                       </p>
                       <p className="text-xs text-gray-500 mt-1 flex gap-2">
                          <span>{m.memoType === 'hizb' || m.hizb ? '' : `من الآية ${m.fromAyah} إلى ${m.toAyah}`}</span>

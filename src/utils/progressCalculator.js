@@ -1,4 +1,21 @@
 import { QURAN_DATA, getHizbAyahList, TOTAL_HIZB_COUNT } from '../constants/quranData';
+import { ATHMAN_STARTS } from '../constants/athmanData';
+
+export const getHizbDisplayString = (record) => {
+  if (!record.hizb) return '';
+  const hizbText = `الحزب ${record.hizb}`;
+  if (record.fromThuman && record.toThuman) {
+    const fromThuman = parseInt(record.fromThuman, 10);
+    const toThuman = parseInt(record.toThuman, 10);
+    if (fromThuman === 1 && toThuman === 8) return hizbText;
+    if (fromThuman === toThuman) {
+      const globalIndex = ((parseInt(record.hizb, 10) - 1) * 8) + (fromThuman - 1);
+      return `${hizbText} - الثمن ${fromThuman} (${ATHMAN_STARTS[globalIndex]})`;
+    }
+    return `${hizbText} (من الثمن ${fromThuman} إلى الثمن ${toThuman})`;
+  }
+  return hizbText;
+};
 
 /**
  * Calculates the Quran memorization progress given an array of memorization records.
@@ -16,7 +33,20 @@ export const calculateProgress = (studentMemos) => {
     
     if (memo.memoType === 'hizb' || memo.hizb) {
       const hizbNum = parseInt(memo.hizb);
-      const hizbAyahs = getHizbAyahList(hizbNum);
+      let hizbAyahs = getHizbAyahList(hizbNum);
+      
+      // Handle Thuman range slicing (approximate slice)
+      if (memo.fromThuman && memo.toThuman) {
+        const fromT = parseInt(memo.fromThuman, 10);
+        const toT = parseInt(memo.toThuman, 10);
+        if (fromT >= 1 && toT <= 8 && fromT <= toT) {
+           const thumanSize = hizbAyahs.length / 8;
+           const startIndex = Math.floor((fromT - 1) * thumanSize);
+           const endIndex = toT === 8 ? hizbAyahs.length : Math.floor(toT * thumanSize);
+           hizbAyahs = hizbAyahs.slice(startIndex, endIndex);
+        }
+      }
+
       hizbAyahs.forEach(a => {
          uniqueAyahsMapped.add(`${a.surahId}-${a.ayah}`);
          if (!progressBySurah[a.surahId]) {
