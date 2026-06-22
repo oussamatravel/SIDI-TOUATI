@@ -107,6 +107,7 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showPraiseCard, setShowPraiseCard] = useState(null);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [supervisorViewMode, setSupervisorViewMode] = useState('my_students');
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [newStudent, setNewStudent] = useState({
     name: '',
@@ -350,8 +351,13 @@ function App() {
         setExams([...rawExams].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
       }
     } else {
-      setStudents(currentStudents); // For teachers, it's already filtered by teacherId in Firestore query
-      if (role === 'supervisor') setTeachers(rawTeachers);
+      if (role === 'supervisor') {
+        setTeachers(rawTeachers);
+        if (supervisorViewMode === 'my_students') {
+          currentStudents = currentStudents.filter(s => s.teacherId === user.uid);
+        }
+      }
+      setStudents(currentStudents); // Update the state with the filtered list
       const myStudentIds = currentStudents.map(s => s.id);
       
       const filteredAtt = rawAttendance.filter(a => a.teacherId === user.uid || myStudentIds.includes(a.studentId));
@@ -386,7 +392,7 @@ function App() {
       setTeacherRemarks(rawTeacherRemarks.filter(r => currentTeacherIds.includes(r.teacherId)));
     }
 
-  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, rawMessages, rawTeacherRemarks, rawExams, role, user, adminBranchFilter, adminTeacherFilter]);
+  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, rawMessages, rawTeacherRemarks, rawExams, role, user, adminBranchFilter, adminTeacherFilter, supervisorViewMode]);
 
   // Messages Unread Logic
   const unreadMessagesCount = messages.filter(m => m.readStatus === false && (role === 'admin' ? m.receiverId === 'admin' : (m.receiverId === user?.uid || m.receiverId === 'all'))).length;
@@ -1858,34 +1864,46 @@ function App() {
               ))}
             </select>
           </div>
-          <button 
-            onClick={() => {
-              setEditingStudent(null);
-              setNewStudent({
-                name: '',
-                birthDate: '',
-                level: 'ابتدائي',
-                branch: user?.branch || SCHOOL_BRANCHES[0],
-                parentName: '',
-                parentEmail: '',
-                fatherPhone: '',
-                motherPhone: '',
-                spousePhone: '',
-                notes: '',
-                teacherId: '',
-                code: Math.random().toString(36).substring(2, 8).toUpperCase() 
-              });
-              setIsModalOpen(true);
-            }}
-            className="btn-primary w-full sm:w-auto"
-          >
-            <Plus size={18} />
-            إضافة طالب جديد
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            {role === 'supervisor' && (
+              <select 
+                value={supervisorViewMode}
+                onChange={(e) => setSupervisorViewMode(e.target.value)}
+                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm font-bold text-primary bg-primary/5"
+              >
+                <option value="my_students">طلبتي فقط</option>
+                <option value="all_supervised">جميع طلبة الأقسام المشرف عليها</option>
+              </select>
+            )}
+            <button 
+              onClick={() => {
+                setEditingStudent(null);
+                setNewStudent({
+                  name: '',
+                  birthDate: '',
+                  level: 'ابتدائي',
+                  branch: user?.branch || SCHOOL_BRANCHES[0],
+                  parentName: '',
+                  parentEmail: '',
+                  fatherPhone: '',
+                  motherPhone: '',
+                  spousePhone: '',
+                  notes: '',
+                  teacherId: '',
+                  code: Math.random().toString(36).substring(2, 8).toUpperCase() 
+                });
+                setIsModalOpen(true);
+              }}
+              className="btn-primary w-full sm:w-auto"
+            >
+              <Plus size={18} />
+              إضافة طالب جديد
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {rawStudents
+          {students
             .filter(s => role !== 'admin' || studentTabBranchFilter === 'All' || s.branch === studentTabBranchFilter)
             .filter(s => role !== 'admin' || studentTabTeacherFilter === 'All' || s.teacherId === studentTabTeacherFilter)
             .filter(s => studentTabLevelFilter === 'All' || s.level === studentTabLevelFilter)
