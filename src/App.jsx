@@ -84,6 +84,8 @@ function App() {
   const [reviews, setReviews] = useState([]);
   const [rawExams, setRawExams] = useState([]);
   const [exams, setExams] = useState([]);
+  const [rawTeacherRemarks, setRawTeacherRemarks] = useState([]);
+  const [teacherRemarks, setTeacherRemarks] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Messages States
@@ -120,11 +122,22 @@ function App() {
     code: Math.random().toString(36).substring(2, 8).toUpperCase()
   });
 
-  const [newTeacher, setNewTeacher] = useState({
-    name: '',
-    email: '',
-    password: '',
-    branch: SCHOOL_BRANCHES[0]
+  const [newTeacher, setNewTeacher] = useState({ 
+    name: '', 
+    email: '', 
+    password: '', 
+    branch: SCHOOL_BRANCHES[0],
+    level: STUDENT_LEVELS[0],
+    role: 'teacher',
+    supervisedLevel: STUDENT_LEVELS[0]
+  });
+
+  const [showTeacherRemarkModal, setShowTeacherRemarkModal] = useState(false);
+  const [selectedTeacherForRemark, setSelectedTeacherForRemark] = useState(null);
+  const [newTeacherRemark, setNewTeacherRemark] = useState({
+    type: 'غياب',
+    note: '',
+    date: format(new Date(), 'yyyy-MM-dd')
   });
 
   const [newMemo, setNewMemo] = useState({
@@ -179,8 +192,10 @@ function App() {
     if (!user) return;
 
     let q = query(collection(db, "students"));
-    // If not admin, only show teacher's students
-    if (role !== 'admin') {
+    // Filter students
+    if (role === 'supervisor') {
+      q = query(collection(db, "students"), where("level", "==", user.supervisedLevel));
+    } else if (role !== 'admin') {
       q = query(collection(db, "students"), where("teacherId", "==", user.uid));
     }
 
@@ -238,12 +253,25 @@ function App() {
       console.error("Messages Sync Error:", error);
     });
 
-    // Fetch all teachers if admin
+    // Fetch all teachers if admin or supervisor
     let unsubscribeTeach = () => {};
-    if (role === 'admin') {
+    if (role === 'admin' || role === 'supervisor') {
       const qT = query(collection(db, "teachers"), orderBy("name"));
       unsubscribeTeach = onSnapshot(qT, (snapshot) => {
-        setRawTeachers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        if (role === 'supervisor') {
+          docs = docs.filter(d => d.level === user.supervisedLevel || d.id === user.uid);
+        }
+        setRawTeachers(docs);
+      });
+    }
+
+    // Fetch teacher remarks if admin or supervisor
+    let unsubscribeTeacherRemarks = () => {};
+    if (role === 'admin' || role === 'supervisor') {
+      const qTR = query(collection(db, "teacher_remarks"));
+      unsubscribeTeacherRemarks = onSnapshot(qTR, (snapshot) => {
+        setRawTeacherRemarks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       });
     }
 
@@ -256,6 +284,7 @@ function App() {
       unsubscribeExam();
       unsubscribeTeach();
       unsubscribeMsg();
+      unsubscribeTeacherRemarks();
     };
   }, [user, role]);
 
@@ -344,7 +373,13 @@ function App() {
       setMessages(rawMessages.filter(m => m.senderId === user.uid || m.receiverId === user.uid || m.receiverId === 'all'));
     }
 
-  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, rawMessages, role, user, adminBranchFilter, adminTeacherFilter]);
+    // Filter teacher remarks
+    if (role === 'admin' || role === 'supervisor') {
+      const currentTeacherIds = currentTeachers.map(t => t.id);
+      setTeacherRemarks(rawTeacherRemarks.filter(r => currentTeacherIds.includes(r.teacherId)));
+    }
+
+  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, rawMessages, rawTeacherRemarks, rawExams, role, user, adminBranchFilter, adminTeacherFilter]);
 
   // Messages Unread Logic
   const unreadMessagesCount = messages.filter(m => m.readStatus === false && (role === 'admin' ? m.receiverId === 'admin' : (m.receiverId === user?.uid || m.receiverId === 'all'))).length;
@@ -654,9 +689,14 @@ function App() {
     try {
       if (editingTeacher) {
         // Update existing teacher
-        await updateDoc(doc(db, "teachers", editingTeacher), {
+        await updateDoc(doc(db, "teachers", editingTeacher.id), {
           name: newTeacher.name,
-          branch: newTeacher.branch
+          email: newTeacher.email,
+          branch: newTeacher.branch,
+          level: newTeacher.level,
+          role: newTeacher.role,
+          supervisedLevel: newTeacher.role === 'supervisor' ? newTeacher.supervisedLevel : null,
+          updatedAt: new Date().toISOString()
         });
         alert("تم تحديث بيانات المعلم بنجاح");
       } else {
@@ -679,8 +719,10 @@ function App() {
         await setDoc(doc(db, "teachers", teacherUid), {
           name: newTeacher.name,
           email: newTeacher.email,
-          role: 'teacher',
+          role: newTeacher.role || 'teacher',
           branch: newTeacher.branch,
+          level: newTeacher.level,
+          supervisedLevel: newTeacher.role === 'supervisor' ? newTeacher.supervisedLevel : null,
           createdAt: new Date().toISOString()
         });
 
@@ -690,7 +732,7 @@ function App() {
       }
       
       setEditingTeacher(null);
-      setNewTeacher({ name: '', email: '', password: '', branch: SCHOOL_BRANCHES[0] });
+      setNewTeacher({ name: '', email: '', password: '', branch: SCHOOL_BRANCHES[0], level: STUDENT_LEVELS[0], role: 'teacher', supervisedLevel: STUDENT_LEVELS[0] });
     } catch (error) {
       console.error("Teacher Saving Error:", error);
       alert("خطأ: " + error.message);
@@ -700,6 +742,33 @@ function App() {
   const handleDeleteTeacher = async (id) => {
     if (window.confirm("هل أنت متأكد من حذف هذا المعلم؟")) {
       await deleteDoc(doc(db, "teachers", id));
+    }
+  };
+
+  const handleSaveTeacherRemark = async (e) => {
+    e.preventDefault();
+    if (!selectedTeacherForRemark || !newTeacherRemark.note.trim()) return;
+
+    try {
+      await addDoc(collection(db, "teacher_remarks"), {
+        teacherId: selectedTeacherForRemark.id,
+        supervisorId: user.uid,
+        type: newTeacherRemark.type,
+        note: newTeacherRemark.note,
+        date: newTeacherRemark.date,
+        createdAt: new Date().toISOString()
+      });
+      setShowTeacherRemarkModal(false);
+      setNewTeacherRemark({ type: 'غياب', note: '', date: format(new Date(), 'yyyy-MM-dd') });
+    } catch (error) {
+      console.error("Error saving remark:", error);
+      alert("خطأ أثناء الحفظ");
+    }
+  };
+
+  const handleDeleteTeacherRemark = async (id) => {
+    if (window.confirm("هل أنت متأكد من حذف هذه الملاحظة؟")) {
+      await deleteDoc(doc(db, "teacher_remarks", id));
     }
   };
 
@@ -3022,7 +3091,8 @@ function App() {
        </div>
 
        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          <div className="xl:col-span-1">
+          {role === 'admin' && (
+             <div className="xl:col-span-1">
              <div className="card sticky top-6">
                 <h4 className="font-bold border-b pb-4 mb-4 flex items-center gap-2">
                    {editingTeacher ? (
@@ -3043,6 +3113,18 @@ function App() {
                       />
                    </div>
                    <div className="space-y-1">
+                      <label className="text-sm font-medium">الرتبة (الدور)</label>
+                      <select
+                        value={newTeacher.role}
+                        onChange={e => setNewTeacher({...newTeacher, role: e.target.value})}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
+                      >
+                        <option value="teacher">أستاذ</option>
+                        <option value="supervisor">مشرف</option>
+                        <option value="admin">مدير</option>
+                      </select>
+                   </div>
+                   <div className="space-y-1">
                       <label className="text-sm font-medium">المدرسة (الفرع)</label>
                       <select
                         value={newTeacher.branch}
@@ -3054,6 +3136,33 @@ function App() {
                         ))}
                       </select>
                    </div>
+                   {newTeacher.role === 'supervisor' ? (
+                     <div className="space-y-1">
+                        <label className="text-sm font-medium">القسم المشرف عليه</label>
+                        <select
+                          value={newTeacher.supervisedLevel}
+                          onChange={e => setNewTeacher({...newTeacher, supervisedLevel: e.target.value})}
+                          className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
+                        >
+                           {STUDENT_LEVELS.map(level => (
+                             <option key={level} value={level}>{level}</option>
+                           ))}
+                        </select>
+                     </div>
+                   ) : (
+                     <div className="space-y-1">
+                        <label className="text-sm font-medium">القسم الذي يدرّسه</label>
+                        <select
+                          value={newTeacher.level}
+                          onChange={e => setNewTeacher({...newTeacher, level: e.target.value})}
+                          className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
+                        >
+                          {STUDENT_LEVELS.map(level => (
+                            <option key={level} value={level}>{level}</option>
+                          ))}
+                        </select>
+                     </div>
+                   )}
                    {!editingTeacher && (
                      <>
                        <div className="space-y-1">
@@ -3103,8 +3212,9 @@ function App() {
                 </form>
              </div>
           </div>
+          )}
 
-          <div className="xl:col-span-2">
+          <div className={role === 'admin' ? "xl:col-span-2" : "xl:col-span-3"}>
              <div className="card">
                 <h4 className="font-bold border-b pb-4 mb-4 flex items-center gap-2">
                    <Users size={20} className="text-primary" />
@@ -3116,7 +3226,8 @@ function App() {
                          <tr className="text-gray-400 text-sm border-b">
                             <th className="pb-4 pr-2">المعلم</th>
                             <th className="pb-4 pr-2">الإيميل</th>
-                            <th className="pb-4 pr-2">المدرسة</th>
+                            <th className="pb-4 pr-2">الرتبة</th>
+                            <th className="pb-4 pr-2">الفرع / القسم</th>
                             <th className="pb-4 pr-2">تاريخ الانضمام</th>
                             <th className="pb-4 pr-2">الإجراءات</th>
                          </tr>
@@ -3126,37 +3237,67 @@ function App() {
                            <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                               <td className="py-4 pr-2">
                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 bg-green-100 text-primary rounded-full flex items-center justify-center text-xs">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs text-white font-bold ${t.role === 'admin' ? 'bg-purple-500' : t.role === 'supervisor' ? 'bg-orange-500' : 'bg-primary'}`}>
                                        {t.name?.charAt(0) || 'M'}
                                     </div>
                                     <span className="font-medium text-sm">{t.name}</span>
                                  </div>
                               </td>
                               <td className="py-4 pr-2 text-xs text-gray-500 font-mono">{t.email}</td>
-                              <td className="py-4 pr-2 text-xs font-bold text-primary">{t.branch || 'Ecole Edimco'}</td>
+                              <td className="py-4 pr-2 text-xs font-bold text-gray-600">
+                                {t.role === 'admin' ? 'مدير' : t.role === 'supervisor' ? 'مشرف' : 'أستاذ'}
+                              </td>
+                              <td className="py-4 pr-2">
+                                 <div className="text-xs font-bold text-primary">{t.branch || 'Ecole Edimco'}</div>
+                                 <div className="text-xs text-gray-500 mt-1">
+                                   {t.role === 'supervisor' ? t.supervisedLevel : t.level || 'غير محدد'}
+                                 </div>
+                              </td>
                               <td className="py-4 pr-2 text-xs text-gray-400">
                                  {t.createdAt ? format(new Date(t.createdAt), 'yyyy/MM/dd') : '--'}
                               </td>
                               <td className="py-4 pr-2 flex gap-2">
                                  <button 
                                     onClick={() => {
-                                      setEditingTeacher(t.id);
-                                      setNewTeacher({ name: t.name, email: t.email, branch: t.branch || SCHOOL_BRANCHES[0], password: '' });
-                                      // Scroll to top where the form is
-                                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                                      setSelectedTeacherForRemark(t);
+                                      setShowTeacherRemarkModal(true);
                                     }}
-                                    className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                                    title="تعديل المعلم"
+                                    className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
+                                    title="تسجيل غياب أو ملاحظة"
                                  >
-                                    <Edit2 size={18} />
+                                    <FileText size={18} />
                                  </button>
-                                 <button 
-                                    onClick={() => handleDeleteTeacher(t.id)}
-                                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                    title="حذف المعلم"
-                                 >
-                                    <Trash2 size={18} />
-                                 </button>
+                                 {role === 'admin' && (
+                                   <>
+                                     <button 
+                                        onClick={() => {
+                                          setEditingTeacher(t.id);
+                                          setNewTeacher({ 
+                                           name: t.name, 
+                                           email: t.email, 
+                                           branch: t.branch || SCHOOL_BRANCHES[0], 
+                                           level: t.level || STUDENT_LEVELS[0],
+                                           role: t.role || 'teacher',
+                                           supervisedLevel: t.supervisedLevel || STUDENT_LEVELS[0],
+                                           password: '' 
+                                         });
+                                          // Scroll to top where the form is
+                                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }}
+                                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                        title="تعديل المعلم"
+                                     >
+                                        <Edit2 size={18} />
+                                     </button>
+                                     <button 
+                                        onClick={() => handleDeleteTeacher(t.id)}
+                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="حذف المعلم"
+                                     >
+                                        <Trash2 size={18} />
+                                     </button>
+                                   </>
+                                 )}
                               </td>
                            </tr>
                          ))}
@@ -3173,6 +3314,104 @@ function App() {
              </div>
           </div>
        </div>
+       <div className="mt-8">
+          <div className="card">
+             <h4 className="font-bold border-b pb-4 mb-4 flex items-center gap-2">
+                <FileText size={20} className="text-primary" />
+                سجل الغياب وملاحظات الأساتذة
+             </h4>
+             <div className="overflow-x-auto">
+                <table className="w-full text-right">
+                   <thead>
+                      <tr className="text-gray-400 text-sm border-b">
+                         <th className="pb-4 pr-2">المعلم</th>
+                         <th className="pb-4 pr-2">النوع</th>
+                         <th className="pb-4 pr-2">التاريخ</th>
+                         <th className="pb-4 pr-2">الملاحظة</th>
+                         <th className="pb-4 pr-2 w-16"></th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y">
+                      {teacherRemarks.map(r => {
+                        const t = teachers.find(t => t.id === r.teacherId);
+                        return (
+                          <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                             <td className="py-3 pr-2 font-medium">{t ? t.name : 'معلم محذوف'}</td>
+                             <td className="py-3 pr-2">
+                               <span className={`px-2 py-1 rounded-full text-xs font-bold ${r.type === 'غياب' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                                 {r.type}
+                               </span>
+                             </td>
+                             <td className="py-3 pr-2 text-sm text-gray-500">{r.date}</td>
+                             <td className="py-3 pr-2 text-sm text-gray-600">{r.note}</td>
+                             <td className="py-3 pr-2 text-left">
+                                <button onClick={() => handleDeleteTeacherRemark(r.id)} className="text-red-400 hover:text-red-600">
+                                  <Trash2 size={16} />
+                                </button>
+                             </td>
+                          </tr>
+                        );
+                      })}
+                      {teacherRemarks.length === 0 && (
+                        <tr>
+                           <td colSpan="5" className="text-center py-6 text-gray-400">لا توجد ملاحظات مسجلة</td>
+                        </tr>
+                      )}
+                   </tbody>
+                </table>
+             </div>
+          </div>
+       </div>
+
+       {/* Teacher Remark Modal */}
+       {showTeacherRemarkModal && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+             <div className="bg-white rounded-2xl w-full max-w-md p-6">
+                <div className="flex justify-between items-center mb-4">
+                   <h3 className="text-lg font-bold">تسجيل ملاحظة: {selectedTeacherForRemark?.name}</h3>
+                   <button onClick={() => setShowTeacherRemarkModal(false)} className="text-gray-400 hover:text-gray-600">
+                      <X size={24} />
+                   </button>
+                </div>
+                <form onSubmit={handleSaveTeacherRemark} className="space-y-4">
+                   <div>
+                      <label className="text-sm font-medium block mb-1">النوع</label>
+                      <select 
+                         value={newTeacherRemark.type}
+                         onChange={e => setNewTeacherRemark({...newTeacherRemark, type: e.target.value})}
+                         className="w-full px-4 py-2 border rounded-lg"
+                      >
+                         <option value="غياب">غياب</option>
+                         <option value="تأخر">تأخر</option>
+                         <option value="ملاحظة إدارية">ملاحظة إدارية</option>
+                      </select>
+                   </div>
+                   <div>
+                      <label className="text-sm font-medium block mb-1">التاريخ</label>
+                      <input 
+                         type="date"
+                         value={newTeacherRemark.date}
+                         onChange={e => setNewTeacherRemark({...newTeacherRemark, date: e.target.value})}
+                         className="w-full px-4 py-2 border rounded-lg"
+                      />
+                   </div>
+                   <div>
+                      <label className="text-sm font-medium block mb-1">التفاصيل / الملاحظة</label>
+                      <textarea 
+                         required
+                         value={newTeacherRemark.note}
+                         onChange={e => setNewTeacherRemark({...newTeacherRemark, note: e.target.value})}
+                         className="w-full px-4 py-2 border rounded-lg h-24"
+                         placeholder="اكتب تفاصيل الغياب أو الملاحظة..."
+                      />
+                   </div>
+                   <button type="submit" className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3 rounded-lg">
+                      حفظ السجل
+                   </button>
+                </form>
+             </div>
+          </div>
+       )}
     </div>
   );
 
@@ -3329,7 +3568,7 @@ function App() {
       case 'exams': return renderExams();
       case 'messages': return renderMessages();
       case 'parents': return renderParents();
-      case 'admin': return role === 'admin' ? renderAdmin() : renderDashboard();
+      case 'admin': return (role === 'admin' || role === 'supervisor') ? renderAdmin() : renderDashboard();
       default: return renderDashboard();
     }
   };

@@ -30,9 +30,9 @@ const Sidebar = ({ activeTab, setActiveTab, unreadMessagesCount = 0, installProm
     { id: 'parents', label: 'بوابة الوالدين', icon: UserCircle },
   ];
 
-  // Add Admin item only for admin role
-  if (role === 'admin') {
-    menuItems.push({ id: 'admin', label: 'الإدارة', icon: Shield });
+  // Add Admin item only for admin or supervisor role
+  if (role === 'admin' || role === 'supervisor') {
+    menuItems.push({ id: 'admin', label: role === 'admin' ? 'الإدارة' : 'الأساتذة', icon: Shield });
   }
 
   return (
