@@ -696,7 +696,7 @@ function App() {
     try {
       if (editingTeacher) {
         // Update existing teacher
-        await updateDoc(doc(db, "teachers", editingTeacher.id), {
+        await updateDoc(doc(db, "teachers", editingTeacher), {
           name: newTeacher.name,
           email: newTeacher.email,
           branch: newTeacher.branch,
