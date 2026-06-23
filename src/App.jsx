@@ -1351,8 +1351,8 @@ function App() {
                          </div>
                          <div className="flex justify-between">
                             <span className="text-xs text-gray-500">{m.memoType==='hizb'||m.hizb ? '' : `الآيات: ${m.fromAyah} - ${m.toAyah}`}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${m.status==='good'?'bg-green-100 text-green-700':m.status==='review'?'bg-yellow-100 text-yellow-700':'bg-red-100 text-red-700'}`}>
-                               {m.status==='good'?'جيد':m.status==='review'?'يحتاج الى ترسيخ':'حفظ غير متقن'}
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${m.status==='good'?'bg-green-100 text-green-700':m.status==='review'?'bg-yellow-100 text-yellow-700':m.status==='performance'?'bg-blue-100 text-blue-700':'bg-red-100 text-red-700'}`}>
+                               {m.status==='good'?'جيد':m.status==='review'?'يحتاج الى ترسيخ':m.status==='performance'?'الأداء':'حفظ غير متقن'}
                             </span>
                          </div>
                       </div>
@@ -1365,8 +1365,8 @@ function App() {
                          </div>
                          <div className="flex justify-between">
                             <span className="text-xs text-gray-500">{r.memoType==='hizb'||r.hizb ? '' : `الآيات: ${r.fromAyah} - ${r.toAyah}`}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${r.status==='pending'?'bg-gray-200 text-gray-700':r.status==='good'?'bg-green-100 text-green-700':r.status==='review'?'bg-yellow-100 text-yellow-700':'bg-red-100 text-red-700'}`}>
-                               {r.status==='pending'?'قيد الانتظار':r.status==='good'?'جيد':r.status==='review'?'يحتاج الى ترسيخ':'حفظ غير متقن'}
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${r.status==='pending'?'bg-gray-200 text-gray-700':r.status==='good'?'bg-green-100 text-green-700':r.status==='review'?'bg-yellow-100 text-yellow-700':r.status==='performance'?'bg-blue-100 text-blue-700':'bg-red-100 text-red-700'}`}>
+                               {r.status==='pending'?'قيد الانتظار':r.status==='good'?'جيد':r.status==='review'?'يحتاج الى ترسيخ':r.status==='performance'?'الأداء':'حفظ غير متقن'}
                             </span>
                          </div>
                       </div>
@@ -1760,9 +1760,10 @@ function App() {
                   <div className="text-right">
                     <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                       memo.status === 'good' ? 'bg-green-100 text-green-700' :
-                      memo.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                      memo.status === 'review' ? 'bg-yellow-100 text-yellow-700' :
+                      memo.status === 'performance' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
                     }`}>
-                      {memo.status === 'good' ? 'جيد' : memo.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
+                      {memo.status === 'good' ? 'جيد' : memo.status === 'review' ? 'يحتاج الى ترسيخ' : memo.status === 'performance' ? 'الأداء' : 'حفظ غير متقن'}
                     </span>
                     <span className="text-[10px] text-gray-400 block mt-1">
                       {memo.date ? format(new Date(memo.date), 'HH:mm', { locale: ar }) : '--'}
@@ -2423,7 +2424,7 @@ function App() {
                    <div className="space-y-1">
                       <label className="text-sm font-medium">التقييم</label>
                       <div className="flex gap-2">
-                         {['good', 'review', 'weak'].map((stat) => (
+                         {['good', 'review', 'weak', 'performance'].map((stat) => (
                            <label key={stat} className="flex-1 cursor-pointer">
                               <input 
                                 type="radio" 
@@ -2437,8 +2438,9 @@ function App() {
                                 ${stat === 'good' ? 'bg-green-50 text-green-700 peer-checked:bg-green-200' : ''}
                                 ${stat === 'review' ? 'bg-yellow-50 text-yellow-700 peer-checked:bg-yellow-200' : ''}
                                 ${stat === 'weak' ? 'bg-red-50 text-red-700 peer-checked:bg-red-200' : ''}
+                                ${stat === 'performance' ? 'bg-blue-50 text-blue-700 peer-checked:bg-blue-200' : ''}
                               `}>
-                                {stat === 'good' ? 'جيد' : stat === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
+                                {stat === 'good' ? 'جيد' : stat === 'review' ? 'يحتاج الى ترسيخ' : stat === 'weak' ? 'حفظ غير متقن' : 'الأداء'}
                               </div>
                            </label>
                          ))}
@@ -2496,9 +2498,10 @@ function App() {
                       <div className="flex justify-between items-center mt-3 pt-3 border-t">
                          <div className={`text-xs px-2 py-1 rounded-full ${
                             memo.status === 'good' ? 'bg-green-100 text-green-700' :
-                            memo.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                            memo.status === 'review' ? 'bg-yellow-100 text-yellow-700' :
+                            memo.status === 'performance' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
                          }`}>
-                            {memo.status === 'good' ? 'جيد' : memo.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
+                            {memo.status === 'good' ? 'جيد' : memo.status === 'review' ? 'يحتاج الى ترسيخ' : memo.status === 'performance' ? 'الأداء' : 'حفظ غير متقن'}
                          </div>
                          <button 
                            onClick={async () => {
@@ -2741,6 +2744,7 @@ function App() {
                               <div className="flex gap-2 w-full sm:w-auto">
                                  <button onClick={() => handleEvaluateReview(rev.id, 'good')} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-md bg-green-100 text-green-700 hover:bg-green-200 transition-colors">جيد</button>
                                  <button onClick={() => handleEvaluateReview(rev.id, 'review')} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-md bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-colors">يحتاج الى ترسيخ</button>
+                                 <button onClick={() => handleEvaluateReview(rev.id, 'performance')} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors">الأداء</button>
                                  <button onClick={() => handleEvaluateReview(rev.id, 'weak')} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-md bg-red-100 text-red-700 hover:bg-red-200 transition-colors">حفظ غير متقن</button>
                               </div>
                            </div>
@@ -2791,9 +2795,10 @@ function App() {
                         <div className="flex justify-between items-center mt-3 pt-3 border-t">
                            <div className={`text-xs px-2 py-1 rounded-full ${
                               rev.status === 'good' ? 'bg-green-100 text-green-700' :
-                              rev.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                              rev.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 
+                              rev.status === 'performance' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
                            }`}>
-                              {rev.status === 'good' ? 'جيد' : rev.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
+                              {rev.status === 'good' ? 'جيد' : rev.status === 'review' ? 'يحتاج الى ترسيخ' : rev.status === 'performance' ? 'الأداء' : 'حفظ غير متقن'}
                            </div>
                            <button onClick={() => handleDeleteReview(rev.id)} className="text-gray-300 hover:text-red-500 transition-colors">
                               <Trash2 size={14} />
@@ -2930,9 +2935,10 @@ function App() {
                        </div>
                        <div className={`text-xs px-2 py-1 rounded-full ${
                           m.status === 'good' ? 'bg-green-100 text-green-700' :
-                          m.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                          m.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 
+                          m.status === 'performance' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
                        }`}>
-                          {m.status === 'good' ? 'جيد' : m.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
+                          {m.status === 'good' ? 'جيد' : m.status === 'review' ? 'يحتاج الى ترسيخ' : m.status === 'performance' ? 'الأداء' : 'حفظ غير متقن'}
                        </div>
                     </div>
                   ))}
@@ -2986,11 +2992,13 @@ function App() {
                        <div className={`text-xs px-2 py-1 rounded-full ${
                           r.status === 'pending' ? 'bg-orange-100 text-orange-700' :
                           r.status === 'good' ? 'bg-green-100 text-green-700' :
-                          r.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                          r.status === 'review' ? 'bg-yellow-100 text-yellow-700' : 
+                          r.status === 'performance' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
                        }`}>
                           {r.status === 'pending' ? 'قيد الانتظار' : 
                            r.status === 'good' ? 'جيد' : 
-                           r.status === 'review' ? 'يحتاج الى ترسيخ' : 'حفظ غير متقن'}
+                           r.status === 'review' ? 'يحتاج الى ترسيخ' : 
+                           r.status === 'performance' ? 'الأداء' : 'حفظ غير متقن'}
                        </div>
                     </div>
                   ))}
