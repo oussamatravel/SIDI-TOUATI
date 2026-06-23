@@ -1331,8 +1331,8 @@ function App() {
                    {periodAttendance.map((a, i) => (
                       <div key={i} className="flex justify-between text-sm border-b pb-1 last:border-0 hover:bg-gray-50 p-1 rounded">
                          <span className="text-gray-600">{new Date(a.date).toLocaleDateString('ar-EG', { weekday:'short', month:'short', day:'numeric' })}</span>
-                         <span className={`font-bold ${a.status === 'present'?'text-green-600':a.status==='late'?'text-orange-500':'text-red-500'}`}>
-                            {a.status === 'present' ? 'حاضر' : a.status === 'late' ? 'متأخر' : a.status === 'absent' ? 'غائب' : 'متوقف'}
+                         <span className={`font-bold ${a.status === 'present'?'text-green-600':a.status==='late'?'text-orange-500':a.status==='excused'?'text-purple-600':'text-red-500'}`}>
+                            {a.status === 'present' ? 'حاضر' : a.status === 'late' ? 'متأخر' : a.status === 'excused' ? 'مأذون' : a.status === 'absent' ? 'غائب' : 'متوقف'}
                          </span>
                       </div>
                    ))}
@@ -1526,7 +1526,8 @@ function App() {
       const dayAtt = attendance.filter(a => a.date === dateStr);
       const present = dayAtt.filter(a => a.status === 'present').length;
       const absent = dayAtt.filter(a => a.status === 'absent').length;
-      attendanceData.push({ dayLabel, dateStr, present, absent, total: present + absent });
+      const excused = dayAtt.filter(a => a.status === 'excused').length;
+      attendanceData.push({ dayLabel, dateStr, present, absent, excused, total: present + absent + excused });
 
       const dayMemo = memorization.filter(m => m.date && m.date.startsWith(dateStr));
       memoData.push({ dayLabel, count: dayMemo.length });
@@ -1695,13 +1696,15 @@ function App() {
               {attendanceData.map((d, i) => {
                 const presentHeight = (d.present / maxAtt) * 100;
                 const absentHeight = (d.absent / maxAtt) * 100;
+                const excusedHeight = (d.excused / maxAtt) * 100;
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
                     <div className="absolute -top-10 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none whitespace-nowrap">
-                      حاضر: {d.present} | غائب: {d.absent}
+                      حاضر: {d.present} | مأذون: {d.excused} | غائب: {d.absent}
                     </div>
                     <div className="w-full h-32 bg-gray-100 rounded-t-sm flex flex-col justify-end overflow-hidden">
                       <div style={{ height: `${absentHeight}%` }} className="bg-red-400 w-full transition-all duration-500"></div>
+                      <div style={{ height: `${excusedHeight}%` }} className="bg-purple-400 w-full transition-all duration-500"></div>
                       <div style={{ height: `${presentHeight}%` }} className="bg-primary w-full transition-all duration-500"></div>
                     </div>
                     <span className="text-[10px] text-gray-500 truncate w-full text-center">{d.dayLabel}</span>
@@ -2204,6 +2207,17 @@ function App() {
                          <CheckCircle size={14} className="opacity-0 w-0 h-0" />
                          <XCircle size={14} />
                          <span className="text-xs font-medium">غائب</span>
+                      </button>
+                      <button 
+                        onClick={() => handleAttendance(student.id, 'excused')}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border transition-colors ${
+                          studentAttendance?.status === 'excused'
+                          ? 'bg-purple-600 border-purple-600 text-white'
+                          : 'border-purple-200 text-purple-600 hover:bg-purple-50'
+                        }`}
+                      >
+                         <AlertTriangle size={14} />
+                         <span className="text-xs font-medium">مأذون</span>
                       </button>
                       <button 
                         onClick={() => handleAttendance(student.id, 'stopped')}
@@ -3017,10 +3031,12 @@ function App() {
                        <span className={`font-bold ${
                           a.status === 'present' ? 'text-green-600' :
                           a.status === 'late' ? 'text-orange-500' :
+                          a.status === 'excused' ? 'text-purple-600' :
                           a.status === 'absent' ? 'text-red-600' : 'text-gray-500'
                        }`}>
                           {a.status === 'present' && 'حاضر'}
                           {a.status === 'late' && 'متأخر'}
+                          {a.status === 'excused' && 'مأذون'}
                           {a.status === 'absent' && 'غائب'}
                           {a.status === 'stopped' && 'متوقف'}
                        </span>
