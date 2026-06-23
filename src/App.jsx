@@ -821,6 +821,35 @@ function App() {
     }
   };
 
+  const handlePromoteStudent = async (student) => {
+    if (!student.level || !student.level.startsWith('محو الأمية')) return;
+    const levels = ['محو الأمية الأول', 'محو الأمية الثاني', 'محو الأمية الثالث'];
+    const currentIndex = levels.indexOf(student.level);
+    if (currentIndex >= 0 && currentIndex < levels.length - 1) {
+      const nextLevel = levels[currentIndex + 1];
+      if (window.confirm(`هل أنت متأكد من ترقية الطالب إلى ${nextLevel}؟`)) {
+         try {
+           await updateDoc(doc(db, "students", student.id), { level: nextLevel, isRepeating: false });
+         } catch(e) {
+           console.error("Error promoting:", e);
+         }
+      }
+    } else {
+      alert("الطالب في المستوى الأخير من محو الأمية.");
+    }
+  };
+
+  const handleRepeatStudent = async (student) => {
+    if (!student.level || !student.level.startsWith('محو الأمية')) return;
+    if (window.confirm(`هل أنت متأكد من تحديد الطالب كمعيد في ${student.level}؟`)) {
+       try {
+         await updateDoc(doc(db, "students", student.id), { isRepeating: true });
+       } catch(e) {
+         console.error("Error repeating:", e);
+       }
+    }
+  };
+
   const handleDeleteStudent = async (id) => {
     if (window.confirm("هل أنت متأكد من حذف هذا الطالب؟")) {
       await deleteDoc(doc(db, "students", id));
@@ -1234,6 +1263,32 @@ function App() {
                   {/* Fallback for old data */}
                   {!student.fatherPhone && !student.motherPhone && student.phone && <span>📞 {student.phone}</span>}
                 </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="bg-white/20 px-2 py-1 rounded text-sm">
+                    المستوى: {student.level || 'غير محدد'}
+                  </span>
+                  {student.isRepeating && (
+                    <span className="bg-red-500 text-white px-2 py-1 rounded text-sm font-bold animate-pulse">
+                      معيد
+                    </span>
+                  )}
+                </div>
+                {student.level && student.level.startsWith('محو الأمية') && (
+                  <div className="mt-4 flex gap-2">
+                    <button 
+                      onClick={() => handlePromoteStudent(student)}
+                      className="bg-green-500 hover:bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-lg"
+                    >
+                      ترقية للمستوى التالي ⬆️
+                    </button>
+                    <button 
+                      onClick={() => handleRepeatStudent(student)}
+                      className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-lg"
+                    >
+                      إعادة المستوى 🔄
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             <div className="bg-white/10 px-6 py-4 rounded-2xl text-center">
