@@ -922,7 +922,7 @@ function App() {
             if(record.status === 'present') statusAr = 'حاضر';
             if(record.status === 'absent') statusAr = 'غائب';
             if(record.status === 'late') statusAr = 'متأخر';
-            if(record.status === 'excused') statusAr = 'مأذون';
+            if(record.status === 'excused') statusAr = 'غياب مبرر';
           }
           row[date] = statusAr;
         });
@@ -1332,7 +1332,7 @@ function App() {
                       <div key={i} className="flex justify-between text-sm border-b pb-1 last:border-0 hover:bg-gray-50 p-1 rounded">
                          <span className="text-gray-600">{new Date(a.date).toLocaleDateString('ar-EG', { weekday:'short', month:'short', day:'numeric' })}</span>
                          <span className={`font-bold ${a.status === 'present'?'text-green-600':a.status==='late'?'text-orange-500':a.status==='excused'?'text-purple-600':'text-red-500'}`}>
-                            {a.status === 'present' ? 'حاضر' : a.status === 'late' ? 'متأخر' : a.status === 'excused' ? 'مأذون' : a.status === 'absent' ? 'غائب' : 'متوقف'}
+                            {a.status === 'present' ? 'حاضر' : a.status === 'late' ? 'متأخر' : a.status === 'excused' ? 'غياب مبرر' : a.status === 'absent' ? 'غائب' : 'متوقف'}
                          </span>
                       </div>
                    ))}
@@ -1700,7 +1700,7 @@ function App() {
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
                     <div className="absolute -top-10 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none whitespace-nowrap">
-                      حاضر: {d.present} | مأذون: {d.excused} | غائب: {d.absent}
+                      حاضر: {d.present} | غياب مبرر: {d.excused} | غائب: {d.absent}
                     </div>
                     <div className="w-full h-32 bg-gray-100 rounded-t-sm flex flex-col justify-end overflow-hidden">
                       <div style={{ height: `${absentHeight}%` }} className="bg-red-400 w-full transition-all duration-500"></div>
@@ -2217,7 +2217,7 @@ function App() {
                         }`}
                       >
                          <AlertTriangle size={14} />
-                         <span className="text-xs font-medium">مأذون</span>
+                         <span className="text-xs font-medium">غياب مبرر</span>
                       </button>
                       <button 
                         onClick={() => handleAttendance(student.id, 'stopped')}
@@ -3036,7 +3036,7 @@ function App() {
                        }`}>
                           {a.status === 'present' && 'حاضر'}
                           {a.status === 'late' && 'متأخر'}
-                          {a.status === 'excused' && 'مأذون'}
+                          {a.status === 'excused' && 'غياب مبرر'}
                           {a.status === 'absent' && 'غائب'}
                           {a.status === 'stopped' && 'متوقف'}
                        </span>
