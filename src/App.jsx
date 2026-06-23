@@ -36,7 +36,8 @@ import {
   Star,
   Target,
   ShieldCheck,
-  Trophy
+  Trophy,
+  X
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
 import { ATHMAN_STARTS } from './constants/athmanData';
