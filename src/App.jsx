@@ -64,7 +64,7 @@ import ParentPortal from './components/ParentPortal';
 import PraiseCard from './components/PraiseCard';
 
 export const SCHOOL_BRANCHES = ['Ecole Edimco', 'Ecole Ighil Elbordj', 'Ecole Ritaj'];
-export const STUDENT_LEVELS = ['ما قبل التمدرس', 'ابتدائي', 'متوسط', 'ثانوي', 'كبار', 'محو الأمية', 'العلوم الشرعية', 'الإجازة'];
+export const STUDENT_LEVELS = ['ما قبل التمدرس', 'ابتدائي', 'متوسط', 'ثانوي', 'كبار', 'محو الأمية الأول', 'محو الأمية الثاني', 'محو الأمية الثالث', 'العلوم الشرعية', 'الإجازة'];
 
 function App() {
   const { user, role, logout } = useAuth();
