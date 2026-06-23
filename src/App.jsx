@@ -1822,7 +1822,7 @@ function App() {
               />
             </div>
             
-            {role === 'admin' && (
+            {(role === 'admin' || (role === 'supervisor' && supervisorViewMode === 'all_supervised')) && (
               <>
                 <select 
                   value={studentTabBranchFilter}
@@ -1904,8 +1904,8 @@ function App() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {students
-            .filter(s => role !== 'admin' || studentTabBranchFilter === 'All' || s.branch === studentTabBranchFilter)
-            .filter(s => role !== 'admin' || studentTabTeacherFilter === 'All' || s.teacherId === studentTabTeacherFilter)
+            .filter(s => !(role === 'admin' || (role === 'supervisor' && supervisorViewMode === 'all_supervised')) || studentTabBranchFilter === 'All' || s.branch === studentTabBranchFilter)
+            .filter(s => !(role === 'admin' || (role === 'supervisor' && supervisorViewMode === 'all_supervised')) || studentTabTeacherFilter === 'All' || s.teacherId === studentTabTeacherFilter)
             .filter(s => studentTabLevelFilter === 'All' || s.level === studentTabLevelFilter)
             .filter(s => 
               (s.name || '').includes(studentSearch) || 
