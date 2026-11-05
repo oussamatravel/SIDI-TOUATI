@@ -43,6 +43,7 @@ import {
   Target,
   ShieldCheck,
   Trophy,
+  School,
   X
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
