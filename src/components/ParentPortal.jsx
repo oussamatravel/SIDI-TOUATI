@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { UserCircle, LogOut, Calendar, Medal, Star, Target, ShieldCheck, Trophy, Award } from 'lucide-react';
+import { UserCircle, LogOut, Calendar, Medal, Star, Target, ShieldCheck, Trophy, Award, CreditCard, CheckCircle, Clock } from 'lucide-react';
 import { calculateProgress, getHizbDisplayString } from '../utils/progressCalculator';
 import VisualQuran from './VisualQuran';
 
 function ParentPortal({ studentCode, onLogout }) {
   const [student, setStudent] = useState(null);
-  const [parentData, setParentData] = useState({ attendance: [], memorization: [], reviews: [], exams: [] });
+  const [parentData, setParentData] = useState({ attendance: [], memorization: [], reviews: [], exams: [], subscriptions: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -33,24 +33,28 @@ function ParentPortal({ studentCode, onLogout }) {
         const qMem = query(collection(db, 'memorization'), where('studentId', '==', studentData.id));
         const qRev = query(collection(db, 'reviews'), where('studentId', '==', studentData.id));
         const qExams = query(collection(db, 'exams'), where('studentId', '==', studentData.id));
+        const qSubs = query(collection(db, 'subscriptions'), where('studentId', '==', studentData.id));
 
-        const [attSnap, memSnap, revSnap, examsSnap] = await Promise.all([
+        const [attSnap, memSnap, revSnap, examsSnap, subsSnap] = await Promise.all([
           getDocs(qAtt),
           getDocs(qMem),
           getDocs(qRev),
-          getDocs(qExams)
+          getDocs(qExams),
+          getDocs(qSubs)
         ]);
 
         const att = attSnap.docs.map(d => d.data()).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
         const mem = memSnap.docs.map(d => d.data()).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
         const rev = revSnap.docs.map(d => d.data()).sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0));
         const exams = examsSnap.docs.map(d => d.data()).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+        const subs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
         setParentData({
           attendance: att,
           memorization: mem,
           reviews: rev,
-          exams: exams
+          exams: exams,
+          subscriptions: subs
         });
 
       } catch (err) {
@@ -173,6 +177,79 @@ function ParentPortal({ studentCode, onLogout }) {
             </div>
           </div>
         )}
+
+        {/* Subscription Card */}
+        {(() => {
+          const latestSub = (parentData.subscriptions && parentData.subscriptions.length > 0)
+            ? parentData.subscriptions[0]
+            : null;
+          const isPaid = latestSub && latestSub.status === 'paid';
+          const isExempt = latestSub && latestSub.status === 'exempt';
+          const isPending = latestSub && latestSub.status === 'pending';
+
+          return (
+            <div className={`p-5 rounded-2xl border shadow-sm ${
+              isPaid
+                ? 'bg-gradient-to-l from-emerald-50 to-white border-emerald-200'
+                : isExempt
+                ? 'bg-gradient-to-l from-blue-50 to-white border-blue-200'
+                : 'bg-gradient-to-l from-amber-50 to-white border-amber-200'
+            }`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    isPaid ? 'bg-emerald-100 text-emerald-700' : isExempt ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    <CreditCard size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-gray-800 text-base">الاشتراك السنوي</h4>
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">
+                        {latestSub?.academicYear || '2025-2026'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {isPaid 
+                        ? `تم تسديد الاشتراك بمبلغ ${latestSub.amount || 0} د.ج`
+                        : isExempt 
+                        ? 'معفى من رسوم الاشتراك'
+                        : isPending
+                        ? 'الاشتراك قيد المعالجة'
+                        : 'لم يتم تسديد الاشتراك السنوي بعد'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {isPaid ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      <CheckCircle size={14} />
+                      تم الدفع
+                      {latestSub.receiptNumber && <span className="opacity-75">#{latestSub.receiptNumber}</span>}
+                    </span>
+                  ) : isExempt ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                      معفى
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                      <Clock size={14} />
+                      غير مسدد
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {isPaid && latestSub.paymentDate && (
+                <div className="mt-3 pt-3 border-t border-emerald-100 flex flex-wrap gap-4 text-xs text-gray-600">
+                  <span>📅 تاريخ الدفع: {new Date(latestSub.paymentDate).toLocaleDateString('ar-DZ')}</span>
+                  {latestSub.paymentMethod && <span>💳 طريقة الدفع: {latestSub.paymentMethod === 'cash' ? 'نقداً' : 'تحويل'}</span>}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="grid grid-cols-2 gap-4">
            <div className="bg-white p-6 rounded-2xl shadow-sm border text-center">

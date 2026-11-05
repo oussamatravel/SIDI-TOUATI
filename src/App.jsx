@@ -6,6 +6,7 @@ import { SURAH_LIST } from './constants/surahs';
 import { calculateProgress, getHizbDisplayString } from './utils/progressCalculator';
 import VisualQuran from './components/VisualQuran';
 import { 
+  CreditCard,
   Users, 
   Calendar, 
   BookOpen, 
@@ -62,6 +63,7 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import ParentPortal from './components/ParentPortal';
 import PraiseCard from './components/PraiseCard';
+import SubscriptionsTab from './components/SubscriptionsTab';
 
 export const SCHOOL_BRANCHES = ['Ecole Edimco', 'Ecole Ighil Elbordj', 'Ecole Ritaj'];
 export const STUDENT_LEVELS = ['ما قبل التمدرس', 'ابتدائي', 'متوسط', 'ثانوي', 'كبار', 'محو الأمية الأول', 'محو الأمية الثاني', 'محو الأمية الثالث', 'العلوم الشرعية', 'الإجازة'];
@@ -85,6 +87,8 @@ function App() {
   const [reviews, setReviews] = useState([]);
   const [rawExams, setRawExams] = useState([]);
   const [exams, setExams] = useState([]);
+  const [rawSubscriptions, setRawSubscriptions] = useState([]);
+  const [subscriptions, setSubscriptions] = useState([]);
   const [rawTeacherRemarks, setRawTeacherRemarks] = useState([]);
   const [teacherRemarks, setTeacherRemarks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -251,6 +255,15 @@ function App() {
       console.error("Exams Sync Error:", error);
     });
 
+    // Fetch Subscriptions
+    let qSub = query(collection(db, "subscriptions"));
+    const unsubscribeSub = onSnapshot(qSub, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setRawSubscriptions(data);
+    }, (error) => {
+      console.error("Subscriptions Sync Error:", error);
+    });
+
     // Fetch Messages
     let qMsg = query(collection(db, "messages"), orderBy("timestamp", "asc"));
     const unsubscribeMsg = onSnapshot(qMsg, (snapshot) => {
@@ -290,6 +303,7 @@ function App() {
       unsubscribeMem();
       unsubscribeRev();
       unsubscribeExam();
+      unsubscribeSub();
       unsubscribeTeach();
       unsubscribeMsg();
       unsubscribeTeacherRemarks();
@@ -345,11 +359,13 @@ function App() {
         setMemorization([...rawMemorization.filter(m => branchStudentIds.includes(m.studentId))].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
         setReviews([...rawReviews.filter(r => branchStudentIds.includes(r.studentId))].sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0)));
         setExams([...rawExams.filter(e => branchStudentIds.includes(e.studentId))].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
+        setSubscriptions(rawSubscriptions.filter(s => branchStudentIds.includes(s.studentId)));
       } else {
         setAttendance(rawAttendance);
         setMemorization([...rawMemorization].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
         setReviews([...rawReviews].sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0)));
         setExams([...rawExams].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
+        setSubscriptions(rawSubscriptions);
       }
     } else {
       if (role === 'supervisor') {
@@ -378,6 +394,9 @@ function App() {
         .filter(e => e.teacherId === user.uid || myStudentIds.includes(e.studentId))
         .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
       setExams(filteredExams);
+
+      const filteredSubs = rawSubscriptions.filter(s => s.teacherId === user.uid || myStudentIds.includes(s.studentId));
+      setSubscriptions(filteredSubs);
     }
 
     // Filter messages
@@ -393,7 +412,7 @@ function App() {
       setTeacherRemarks(rawTeacherRemarks.filter(r => currentTeacherIds.includes(r.teacherId)));
     }
 
-  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, rawMessages, rawTeacherRemarks, rawExams, role, user, adminBranchFilter, adminTeacherFilter, supervisorViewMode]);
+  }, [rawStudents, rawAttendance, rawMemorization, rawReviews, rawTeachers, rawMessages, rawTeacherRemarks, rawExams, rawSubscriptions, role, user, adminBranchFilter, adminTeacherFilter, supervisorViewMode]);
 
   // Messages Unread Logic
   const unreadMessagesCount = messages.filter(m => m.readStatus === false && (role === 'admin' ? m.receiverId === 'admin' : (m.receiverId === user?.uid || m.receiverId === 'all'))).length;
@@ -1230,6 +1249,7 @@ function App() {
     const periodTotalAtt = periodAttendance.length;
     
     const badges = getStudentBadges(student.id);
+    const studentSub = (subscriptions || []).find(s => s.studentId === student.id && (s.academicYear === '2025-2026' || !s.academicYear)) || (subscriptions || []).find(s => s.studentId === student.id);
 
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
@@ -1270,6 +1290,20 @@ function App() {
                   {student.isRepeating && (
                     <span className="bg-red-500 text-white px-2 py-1 rounded text-sm font-bold animate-pulse">
                       معيد
+                    </span>
+                  )}
+                  {studentSub && studentSub.status === 'paid' ? (
+                    <span className="bg-emerald-600 text-white px-2.5 py-1 rounded-lg text-xs font-bold inline-flex items-center gap-1 shadow-sm">
+                      <CheckCircle size={14} />
+                      الاشتراك: تم التسديد ({studentSub.amount || 0} د.ج)
+                    </span>
+                  ) : studentSub && studentSub.status === 'exempt' ? (
+                    <span className="bg-blue-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold inline-flex items-center gap-1 shadow-sm">
+                      الاشتراك: معفى
+                    </span>
+                  ) : (
+                    <span className="bg-amber-400 text-amber-950 px-2.5 py-1 rounded-lg text-xs font-bold inline-flex items-center gap-1 shadow-sm">
+                      الاشتراك: غير مسدد
                     </span>
                   )}
                 </div>
@@ -3682,6 +3716,20 @@ function App() {
       case 'memorization': return renderMemorization();
       case 'review': return renderReview();
       case 'exams': return renderExams();
+      case 'subscriptions':
+        return (
+          <SubscriptionsTab
+            user={user}
+            role={role}
+            students={students}
+            rawStudents={rawStudents}
+            teachers={teachers}
+            rawTeachers={rawTeachers}
+            subscriptions={subscriptions}
+            schoolBranches={SCHOOL_BRANCHES}
+            studentLevels={STUDENT_LEVELS}
+          />
+        );
       case 'messages': return renderMessages();
       case 'parents': return renderParents();
       case 'admin': return (role === 'admin' || role === 'supervisor') ? renderAdmin() : renderDashboard();
@@ -3707,6 +3755,8 @@ function App() {
               {activeTab === 'attendance' && 'سجل الحضور'}
               {activeTab === 'memorization' && 'متابعة الحفظ'}
               {activeTab === 'review' && 'المراجعة'}
+              {activeTab === 'exams' && 'الامتحانات'}
+              {activeTab === 'subscriptions' && 'الاشتراكات السنوية'}
               {activeTab === 'messages' && 'الرسائل والملاحظات'}
               {activeTab === 'parents' && 'بوابة الوالدين'}
               {activeTab === 'admin' && 'لوحة الإدارة'}
