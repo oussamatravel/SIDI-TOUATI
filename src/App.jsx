@@ -66,7 +66,7 @@ import PraiseCard from './components/PraiseCard';
 import SubscriptionsTab from './components/SubscriptionsTab';
 
 export const SCHOOL_BRANCHES = ['Ecole Edimco', 'Ecole Ighil Elbordj', 'Ecole Ritaj'];
-export const STUDENT_LEVELS = ['ما قبل التمدرس', 'ابتدائي', 'متوسط', 'ثانوي', 'كبار', 'محو الأمية الأول', 'محو الأمية الثاني', 'محو الأمية الثالث', 'العلوم الشرعية', 'الإجازة'];
+export const STUDENT_LEVELS = ['ما قبل التمدرس', 'ابتدائي', 'متوسط', 'ثانوي', 'قسم إكمالي ثانوي ذكور', 'قسم إكمالي ثانوي إناث', 'كبار', 'محو الأمية الأول', 'محو الأمية الثاني', 'محو الأمية الثالث', 'العلوم الشرعية', 'قسم التأهيل للإجازة', 'الإجازة'];
 
 function App() {
   const { user, role, logout } = useAuth();
@@ -107,6 +107,16 @@ function App() {
   const [studentTabBranchFilter, setStudentTabBranchFilter] = useState('All');
   const [studentTabTeacherFilter, setStudentTabTeacherFilter] = useState('All');
   const [studentTabLevelFilter, setStudentTabLevelFilter] = useState('All');
+
+  // Filters & Views for Attendance Tab
+  const [attendanceViewMode, setAttendanceViewMode] = useState('daily'); // 'daily' | 'history'
+  const [attendanceSearch, setAttendanceSearch] = useState('');
+  const [attendanceTeacherFilter, setAttendanceTeacherFilter] = useState('All');
+  const [attendanceBranchFilter, setAttendanceBranchFilter] = useState('All');
+  const [attendanceLevelFilter, setAttendanceLevelFilter] = useState('All');
+  const [attendanceHistoryStatusFilter, setAttendanceHistoryStatusFilter] = useState('All');
+  const [attendanceHistoryFromDate, setAttendanceHistoryFromDate] = useState('');
+  const [attendanceHistoryToDate, setAttendanceHistoryToDate] = useState('');
 
   // Form States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -524,6 +534,116 @@ function App() {
     } catch (error) {
       console.error("Error adding student:", error);
       alert("خطأ في إضافة الطالب: " + error.message);
+    }
+  };
+
+  // Batch Mark All Filtered Students Present
+  const handleMarkAllPresent = async (studentList) => {
+    if (!studentList || studentList.length === 0) return;
+    if (!window.confirm(`هل أنت متأكد من تسجيل الحضور لجميع الطلاب الظاهرين في القائمة (${studentList.length} طالب) لتاريخ ${attendanceDate}؟`)) return;
+    try {
+      setLoading(true);
+      for (const student of studentList) {
+        const existing = attendance.find(a => a.studentId === student.id && a.date === attendanceDate);
+        if (existing) {
+          await updateDoc(doc(db, "attendance", existing.id), { 
+            status: 'present', 
+            timestamp: new Date().toISOString() 
+          });
+        } else {
+          await addDoc(collection(db, "attendance"), {
+            studentId: student.id,
+            status: 'present',
+            date: attendanceDate,
+            teacherId: student.teacherId || user.uid,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Batch Attendance Error:", err);
+      alert("خطأ أثناء تسجيل الحضور الجماعي: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update specific attendance record
+  const handleUpdateAttendanceRecord = async (recordId, newStatus) => {
+    try {
+      await updateDoc(doc(db, "attendance", recordId), {
+        status: newStatus,
+        timestamp: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error("Update Attendance Record Error:", err);
+      alert("حدث خطأ أثناء تعديل السجل: " + err.message);
+    }
+  };
+
+  // Delete attendance record
+  const handleDeleteAttendanceRecord = async (recordId) => {
+    if (!window.confirm("هل أنت متأكد من حذف هذا السجل من تاريخ الحضور؟")) return;
+    try {
+      await deleteDoc(doc(db, "attendance", recordId));
+    } catch (err) {
+      console.error("Delete Attendance Record Error:", err);
+      alert("حدث خطأ أثناء حذف السجل: " + err.message);
+    }
+  };
+
+  // Export Attendance History to Excel
+  const handleExportAttendanceExcel = (recordsToExport) => {
+    try {
+      const rows = recordsToExport.map((rec, idx) => {
+        const st = rawStudents.find(s => s.id === rec.studentId);
+        const tc = rawTeachers.find(t => t.id === (rec.teacherId || st?.teacherId));
+        let statusAr = 'غير محدد';
+        if (rec.status === 'present') statusAr = 'حاضر';
+        else if (rec.status === 'late') statusAr = 'متأخر';
+        else if (rec.status === 'absent') statusAr = 'غائب';
+        else if (rec.status === 'excused') statusAr = 'غياب مبرر';
+        else if (rec.status === 'stopped') statusAr = 'متوقف';
+
+        return {
+          'الرقم': idx + 1,
+          'التاريخ': rec.date || '--',
+          'كود الطالب': st?.code || '--',
+          'اسم الطالب': st?.name || 'غير معروف',
+          'المستوى': st?.level || '--',
+          'المدرسة / الفرع': st?.branch || '--',
+          'الأستاذ المشرف': tc?.name || '--',
+          'حالة الحضور': statusAr,
+          'وقت التسجيل': rec.timestamp ? format(new Date(rec.timestamp), 'yyyy-MM-dd HH:mm') : '--'
+        };
+      });
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(rows);
+      if (!ws['!views']) ws['!views'] = [];
+      ws['!views'].push({ rightToLeft: true });
+
+      const colWidths = [
+        { wch: 6 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 25 },
+        { wch: 22 },
+        { wch: 20 },
+        { wch: 20 },
+        { wch: 15 },
+        { wch: 20 }
+      ];
+      ws['!cols'] = colWidths;
+
+      XLSX.utils.book_append_sheet(wb, ws, 'سجل_الحضور');
+      const teacherName = attendanceTeacherFilter !== 'All' 
+        ? `_${rawTeachers.find(t => t.id === attendanceTeacherFilter)?.name || 'أستاذ'}` 
+        : '';
+      XLSX.writeFile(wb, `سجل_الحضور${teacherName}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
+    } catch (err) {
+      console.error("Export Attendance Excel Error:", err);
+      alert("حدث خطأ أثناء تصدير ملف الإكسل");
     }
   };
 
@@ -2235,98 +2355,584 @@ function App() {
   );
 
   const renderAttendance = () => {
+    // 1. Daily Students Filtering
+    const dailyFilteredStudents = students.filter(student => {
+      if (attendanceBranchFilter !== 'All' && student.branch !== attendanceBranchFilter) return false;
+      if (attendanceLevelFilter !== 'All' && student.level !== attendanceLevelFilter) return false;
+      if (attendanceTeacherFilter !== 'All' && student.teacherId !== attendanceTeacherFilter) return false;
+      if (attendanceSearch.trim()) {
+        const q = attendanceSearch.toLowerCase().trim();
+        const nameMatch = (student.name || '').toLowerCase().includes(q);
+        const codeMatch = (student.code || '').toLowerCase().includes(q);
+        if (!nameMatch && !codeMatch) return false;
+      }
+      return true;
+    });
+
+    // Daily stats for selected date
+    const dailyStats = dailyFilteredStudents.reduce((acc, student) => {
+      const rec = attendance.find(a => a.studentId === student.id && a.date === attendanceDate);
+      if (rec) {
+        if (rec.status === 'present') acc.present++;
+        else if (rec.status === 'late') acc.late++;
+        else if (rec.status === 'absent') acc.absent++;
+        else if (rec.status === 'excused') acc.excused++;
+        else if (rec.status === 'stopped') acc.stopped++;
+      } else {
+        acc.unrecorded++;
+      }
+      return acc;
+    }, { present: 0, late: 0, absent: 0, excused: 0, stopped: 0, unrecorded: 0 });
+
+    // 2. Attendance History Filtering
+    const historyRecords = attendance.filter(rec => {
+      const student = rawStudents.find(s => s.id === rec.studentId);
+      if (!student) return false;
+
+      // Filter by Teacher (direct on student or attendance record)
+      if (attendanceTeacherFilter !== 'All') {
+        const matchTeacher = student.teacherId === attendanceTeacherFilter || rec.teacherId === attendanceTeacherFilter;
+        if (!matchTeacher) return false;
+      }
+
+      // Filter by School Branch
+      if (attendanceBranchFilter !== 'All' && student.branch !== attendanceBranchFilter) {
+        return false;
+      }
+
+      // Filter by Level
+      if (attendanceLevelFilter !== 'All' && student.level !== attendanceLevelFilter) {
+        return false;
+      }
+
+      // Filter by Status
+      if (attendanceHistoryStatusFilter !== 'All' && rec.status !== attendanceHistoryStatusFilter) {
+        return false;
+      }
+
+      // Filter by Date Range
+      if (attendanceHistoryFromDate && rec.date < attendanceHistoryFromDate) return false;
+      if (attendanceHistoryToDate && rec.date > attendanceHistoryToDate) return false;
+
+      // Filter by Search
+      if (attendanceSearch.trim()) {
+        const q = attendanceSearch.toLowerCase().trim();
+        const nameMatch = (student.name || '').toLowerCase().includes(q);
+        const codeMatch = (student.code || '').toLowerCase().includes(q);
+        if (!nameMatch && !codeMatch) return false;
+      }
+
+      return true;
+    }).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+    // History Stats
+    const historyPresentCount = historyRecords.filter(r => r.status === 'present' || r.status === 'late').length;
+    const historyTotalCount = historyRecords.length;
+    const historyRate = historyTotalCount > 0 ? Math.round((historyPresentCount / historyTotalCount) * 100) : 0;
+
     return (
       <div className="space-y-6">
-         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-dashed">
-            <h3 className="text-xl font-bold flex items-center gap-2">
-               <Calendar className="text-primary" size={24} />
-               حضور الطلاب
-            </h3>
-            <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl border shadow-sm">
-               <label className="text-sm font-bold text-gray-500">تاريخ الحضور:</label>
-               <input 
-                 type="date" 
-                 value={attendanceDate}
-                 onChange={e => setAttendanceDate(e.target.value)}
-                 className="outline-none border-none text-primary font-bold cursor-pointer bg-transparent"
-               />
+        {/* Top Header & Sub-Tab Switcher */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-2xl border shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-emerald-50 text-emerald-700 rounded-2xl">
+              <Calendar size={26} />
             </div>
-         </div>
+            <div>
+              <h3 className="text-xl font-bold text-gray-800">إدارة وسجل الحضور</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                تسجيل الحضور اليومي، تصفية تاريخ حضور الطلاب حسب الأستاذ والمستوى، وتصدير التقارير.
+              </p>
+            </div>
+          </div>
 
-         <div className="card divide-y overflow-hidden">
-            {students.map(student => {
-              const studentAttendance = attendance.find(a => a.studentId === student.id && a.date === attendanceDate);
-              return (
-                <div key={student.id} className="flex items-center justify-between p-4 hover:bg-gray-50">
-                   <div>
-                      <p className="font-bold">{student.name}</p>
-                      <p className="text-xs text-gray-500">{student.parentName}</p>
-                   </div>
-                   <div className="flex gap-1 flex-wrap justify-end">
+          <div className="flex items-center bg-gray-100 p-1.5 rounded-2xl border">
+            <button
+              type="button"
+              onClick={() => setAttendanceViewMode('daily')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                attendanceViewMode === 'daily'
+                  ? 'bg-white text-emerald-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Calendar size={15} />
+              <span>تسجيل الحضور اليومي</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAttendanceViewMode('history')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                attendanceViewMode === 'history'
+                  ? 'bg-white text-emerald-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <History size={15} />
+              <span>سجل الحضور التاريخي</span>
+              {historyRecords.length > 0 && (
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                  {historyRecords.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Global Filter Bar: Teacher, Branch, Level, Search */}
+        <div className="bg-white p-5 rounded-2xl border shadow-sm space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+            <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5">
+              <Users size={16} className="text-emerald-600" />
+              تصفية الطلاب والحضور:
+            </span>
+
+            {/* Clear filters button */}
+            {(attendanceTeacherFilter !== 'All' || attendanceBranchFilter !== 'All' || attendanceLevelFilter !== 'All' || attendanceSearch || attendanceHistoryStatusFilter !== 'All' || attendanceHistoryFromDate || attendanceHistoryToDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAttendanceTeacherFilter('All');
+                  setAttendanceBranchFilter('All');
+                  setAttendanceLevelFilter('All');
+                  setAttendanceSearch('');
+                  setAttendanceHistoryStatusFilter('All');
+                  setAttendanceHistoryFromDate('');
+                  setAttendanceHistoryToDate('');
+                }}
+                className="text-xs text-rose-600 hover:bg-rose-50 px-3 py-1 rounded-lg transition font-bold"
+              >
+                إلغاء جميع الفلاتر 🔄
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* 1. Teacher Filter (Professeur) */}
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1">الأستاذ المشرف:</label>
+              <select
+                value={attendanceTeacherFilter}
+                onChange={(e) => setAttendanceTeacherFilter(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 border rounded-xl text-sm font-bold text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="All">جميع الأساتذة ({rawTeachers.length})</option>
+                {rawTeachers
+                  .filter(t => attendanceBranchFilter === 'All' || t.branch === attendanceBranchFilter)
+                  .map(t => {
+                    const studentCount = rawStudents.filter(s => s.teacherId === t.id).length;
+                    return (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({studentCount} طالب)
+                      </option>
+                    );
+                  })}
+              </select>
+            </div>
+
+            {/* 2. School Branch Filter */}
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1">المدرسة / الفرع:</label>
+              <select
+                value={attendanceBranchFilter}
+                onChange={(e) => {
+                  setAttendanceBranchFilter(e.target.value);
+                  setAttendanceTeacherFilter('All');
+                }}
+                className="w-full px-3 py-2 bg-gray-50 border rounded-xl text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="All">جميع الفروع</option>
+                {SCHOOL_BRANCHES.map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. Level Filter (Includes new levels!) */}
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1">المستوى الدراسي / القسم:</label>
+              <select
+                value={attendanceLevelFilter}
+                onChange={(e) => setAttendanceLevelFilter(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 border rounded-xl text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="All">جميع المستويات والأقسام</option>
+                {STUDENT_LEVELS.map(lvl => (
+                  <option key={lvl} value={lvl}>{lvl}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 4. Search Filter */}
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1">بحث سريع:</label>
+              <div className="relative">
+                <Search className="absolute right-3 top-2.5 text-gray-400" size={16} />
+                <input
+                  type="text"
+                  value={attendanceSearch}
+                  onChange={(e) => setAttendanceSearch(e.target.value)}
+                  placeholder="اسم أو كود الطالب..."
+                  className="w-full pr-9 pl-3 py-2 bg-gray-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* VIEW 1: DAILY ATTENDANCE (تسجيل الحضور اليومي) */}
+        {attendanceViewMode === 'daily' && (
+          <div className="space-y-4">
+            {/* Daily controls bar */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50 p-4 rounded-2xl border">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border shadow-sm">
+                  <label className="text-sm font-bold text-gray-500">تاريخ الحضور:</label>
+                  <input 
+                    type="date" 
+                    value={attendanceDate}
+                    onChange={e => setAttendanceDate(e.target.value)}
+                    className="outline-none border-none text-emerald-700 font-bold cursor-pointer bg-transparent"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAttendanceDate(format(new Date(), 'yyyy-MM-dd'))}
+                  className="px-3 py-2 bg-white text-xs font-bold text-gray-700 border rounded-xl hover:bg-gray-100 transition shadow-sm"
+                >
+                  اليوم
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleMarkAllPresent(dailyFilteredStudents)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-1.5 active:scale-95"
+                >
+                  <CheckCircle size={15} />
+                  <span>تسجيل الكل حاضر ({dailyFilteredStudents.length})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Daily Stats KPI bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              <div className="bg-white p-3 rounded-xl border text-center">
+                <p className="text-[11px] text-gray-500">الطلاب بالقائمة</p>
+                <p className="text-lg font-black text-gray-800">{dailyFilteredStudents.length}</p>
+              </div>
+              <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 text-center">
+                <p className="text-[11px] text-emerald-700 font-bold">حاضر</p>
+                <p className="text-lg font-black text-emerald-700">{dailyStats.present}</p>
+              </div>
+              <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 text-center">
+                <p className="text-[11px] text-orange-700 font-bold">متأخر</p>
+                <p className="text-lg font-black text-orange-700">{dailyStats.late}</p>
+              </div>
+              <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 text-center">
+                <p className="text-[11px] text-purple-700 font-bold">غياب مبرر</p>
+                <p className="text-lg font-black text-purple-700">{dailyStats.excused}</p>
+              </div>
+              <div className="bg-rose-50 p-3 rounded-xl border border-rose-100 text-center">
+                <p className="text-[11px] text-rose-700 font-bold">غائب</p>
+                <p className="text-lg font-black text-rose-700">{dailyStats.absent}</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-xl border text-center">
+                <p className="text-[11px] text-gray-500">لم يسجل بعد</p>
+                <p className="text-lg font-black text-gray-600">{dailyStats.unrecorded}</p>
+              </div>
+            </div>
+
+            {/* Students daily attendance list */}
+            <div className="card divide-y overflow-hidden">
+              {dailyFilteredStudents.map(student => {
+                const studentAttendance = attendance.find(a => a.studentId === student.id && a.date === attendanceDate);
+                const teacher = rawTeachers.find(t => t.id === student.teacherId);
+
+                return (
+                  <div key={student.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-gray-50/80 gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-gray-900">{student.name}</p>
+                        <span className="text-xs text-gray-400 font-mono">#{student.code || '-'}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500">
+                        <span className="bg-gray-100 px-2 py-0.5 rounded font-medium text-gray-700">
+                          {student.level || 'غير محدد'}
+                        </span>
+                        <span>• {student.branch}</span>
+                        {teacher && <span className="text-emerald-700 font-semibold">• الأستاذ: {teacher.name}</span>}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-1.5 flex-wrap justify-end">
                       <button 
                         onClick={() => handleAttendance(student.id, 'present')}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border transition-colors ${
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border transition-all text-xs font-bold ${
                           studentAttendance?.status === 'present'
-                          ? 'bg-green-600 border-green-600 text-white'
-                          : 'border-green-200 text-green-600 hover:bg-green-50'
+                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+                            : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
                         }`}
                       >
-                         <CheckCircle size={14} />
-                         <span className="text-xs font-medium">حاضر</span>
+                        <CheckCircle size={14} />
+                        <span>حاضر</span>
                       </button>
+
                       <button 
                         onClick={() => handleAttendance(student.id, 'late')}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border transition-colors ${
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border transition-all text-xs font-bold ${
                           studentAttendance?.status === 'late'
-                          ? 'bg-orange-500 border-orange-500 text-white'
-                          : 'border-orange-200 text-orange-500 hover:bg-orange-50'
+                            ? 'bg-orange-500 border-orange-500 text-white shadow-sm'
+                            : 'border-orange-200 text-orange-600 hover:bg-orange-50'
                         }`}
                       >
-                         <Calendar size={14} />
-                         <span className="text-xs font-medium">متأخر</span>
+                        <Calendar size={14} />
+                        <span>متأخر</span>
                       </button>
+
                       <button 
                         onClick={() => handleAttendance(student.id, 'absent')}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border transition-colors ${
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border transition-all text-xs font-bold ${
                           studentAttendance?.status === 'absent'
-                          ? 'bg-red-600 border-red-600 text-white'
-                          : 'border-red-200 text-red-600 hover:bg-red-50'
+                            ? 'bg-rose-600 border-rose-600 text-white shadow-sm'
+                            : 'border-rose-200 text-rose-600 hover:bg-rose-50'
                         }`}
                       >
-                         <CheckCircle size={14} className="opacity-0 w-0 h-0" />
-                         <XCircle size={14} />
-                         <span className="text-xs font-medium">غائب</span>
+                        <XCircle size={14} />
+                        <span>غائب</span>
                       </button>
+
                       <button 
                         onClick={() => handleAttendance(student.id, 'excused')}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border transition-colors ${
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border transition-all text-xs font-bold ${
                           studentAttendance?.status === 'excused'
-                          ? 'bg-purple-600 border-purple-600 text-white'
-                          : 'border-purple-200 text-purple-600 hover:bg-purple-50'
+                            ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
+                            : 'border-purple-200 text-purple-600 hover:bg-purple-50'
                         }`}
                       >
-                         <AlertTriangle size={14} />
-                         <span className="text-xs font-medium">غياب مبرر</span>
+                        <AlertTriangle size={14} />
+                        <span>غياب مبرر</span>
                       </button>
+
                       <button 
                         onClick={() => handleAttendance(student.id, 'stopped')}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border transition-colors ${
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border transition-all text-xs font-bold ${
                           studentAttendance?.status === 'stopped'
-                          ? 'bg-gray-600 border-gray-600 text-white'
-                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                            ? 'bg-gray-700 border-gray-700 text-white shadow-sm'
+                            : 'border-gray-200 text-gray-600 hover:bg-gray-100'
                         }`}
                       >
-                         <XCircle size={14} className="rotate-45" />
-                         <span className="text-xs font-medium">متوقف</span>
+                        <XCircle size={14} className="rotate-45" />
+                        <span>متوقف</span>
                       </button>
-                   </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {dailyFilteredStudents.length === 0 && (
+                <div className="text-center py-12 text-gray-400">
+                  <Calendar size={40} className="mx-auto mb-2 opacity-30" />
+                  <p className="font-bold">لا يوجد طلاب يطابقون خيارات التصفية الحالية</p>
                 </div>
-              );
-            })}
-            {students.length === 0 && (
-              <div className="text-center py-10 text-gray-400">لا يوجد طلاب للحضور</div>
-            )}
-         </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 2: ATTENDANCE HISTORY (سجل الحضور التاريخي) */}
+        {attendanceViewMode === 'history' && (
+          <div className="space-y-4">
+            {/* History specific controls */}
+            <div className="bg-white p-4 rounded-2xl border shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                {/* Date From */}
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-gray-600">من تاريخ:</span>
+                  <input
+                    type="date"
+                    value={attendanceHistoryFromDate}
+                    onChange={e => setAttendanceHistoryFromDate(e.target.value)}
+                    className="px-2.5 py-1.5 bg-gray-50 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                </div>
+
+                {/* Date To */}
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-gray-600">إلى تاريخ:</span>
+                  <input
+                    type="date"
+                    value={attendanceHistoryToDate}
+                    onChange={e => setAttendanceHistoryToDate(e.target.value)}
+                    className="px-2.5 py-1.5 bg-gray-50 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-gray-600">الحالة:</span>
+                  <select
+                    value={attendanceHistoryStatusFilter}
+                    onChange={e => setAttendanceHistoryStatusFilter(e.target.value)}
+                    className="px-2.5 py-1.5 bg-gray-50 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  >
+                    <option value="All">جميع الحالات</option>
+                    <option value="present">حاضر</option>
+                    <option value="late">متأخر</option>
+                    <option value="absent">غائب</option>
+                    <option value="excused">غياب مبرر</option>
+                    <option value="stopped">متوقف</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Export Excel Button */}
+              <button
+                type="button"
+                onClick={() => handleExportAttendanceExcel(historyRecords)}
+                disabled={historyRecords.length === 0}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-2 active:scale-95 disabled:opacity-50"
+              >
+                <Download size={15} />
+                <span>تصدير Excel ({historyRecords.length} سجل)</span>
+              </button>
+            </div>
+
+            {/* History KPIs */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-white p-4 rounded-xl border text-center shadow-sm">
+                <p className="text-xs text-gray-500">إجمالي سجلات الحضور</p>
+                <p className="text-2xl font-black text-gray-800 mt-1">{historyTotalCount}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">حسب التصفية النشطة</p>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border text-center shadow-sm">
+                <p className="text-xs text-gray-500">نسبة الحضور الإجمالية</p>
+                <p className="text-2xl font-black text-emerald-600 mt-1">{historyRate}%</p>
+                <p className="text-[10px] text-emerald-600 mt-0.5">{historyPresentCount} حضور وتأخر</p>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border text-center shadow-sm">
+                <p className="text-xs text-gray-500">الغياب غير المبرر</p>
+                <p className="text-2xl font-black text-rose-600 mt-1">
+                  {historyRecords.filter(r => r.status === 'absent').length}
+                </p>
+                <p className="text-[10px] text-rose-500 mt-0.5">سجل غياب</p>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border text-center shadow-sm">
+                <p className="text-xs text-gray-500">الغياب المبرر</p>
+                <p className="text-2xl font-black text-purple-600 mt-1">
+                  {historyRecords.filter(r => r.status === 'excused').length}
+                </p>
+                <p className="text-[10px] text-purple-500 mt-0.5">غياب بإذن مسبق</p>
+              </div>
+            </div>
+
+            {/* History Table */}
+            <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+              <div className="p-4 bg-gray-50/70 border-b flex justify-between items-center">
+                <p className="text-xs font-bold text-gray-700">
+                  سجل العمليات التاريخية ({historyRecords.length} سجل)
+                  {attendanceTeacherFilter !== 'All' && (
+                    <span className="mr-2 text-emerald-700 font-bold">
+                      - الأستاذ: {rawTeachers.find(t => t.id === attendanceTeacherFilter)?.name}
+                    </span>
+                  )}
+                </p>
+                <span className="text-[11px] text-gray-400">مرتب من الأحدث إلى الأقدم</span>
+              </div>
+
+              {historyRecords.length === 0 ? (
+                <div className="text-center py-16 text-gray-400">
+                  <History size={40} className="mx-auto mb-2 opacity-30" />
+                  <p className="font-bold">لا يوجد سجلات حضور تطابق الفلاتر المحددة</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-gray-50 text-gray-500 uppercase font-bold border-b">
+                      <tr>
+                        <th className="py-3 px-4">التاريخ</th>
+                        <th className="py-3 px-4">اسم الطالب</th>
+                        <th className="py-3 px-4">المستوى & الفرع</th>
+                        <th className="py-3 px-4">الأستاذ المشرف</th>
+                        <th className="py-3 px-4 text-center">حالة الحضور</th>
+                        <th className="py-3 px-4 text-center">إجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 font-medium">
+                      {historyRecords.map((rec) => {
+                        const student = rawStudents.find(s => s.id === rec.studentId);
+                        const teacher = rawTeachers.find(t => t.id === (rec.teacherId || student?.teacherId));
+
+                        return (
+                          <tr key={rec.id} className="hover:bg-gray-50/80 transition-colors">
+                            <td className="py-3 px-4 font-mono font-bold text-gray-800">
+                              {rec.date ? format(new Date(rec.date), 'yyyy-MM-dd') : '--'}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <div className="font-bold text-gray-900">{student?.name || 'طالب محذوف'}</div>
+                              <div className="text-[10px] text-gray-400 font-mono">#{student?.code || '-'}</div>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 rounded font-bold">
+                                {student?.level || '--'}
+                              </span>
+                              <div className="text-[10px] text-gray-400 mt-0.5">{student?.branch}</div>
+                            </td>
+
+                            <td className="py-3 px-4 font-medium text-emerald-800">
+                              {teacher ? teacher.name : '--'}
+                            </td>
+
+                            <td className="py-3 px-4 text-center">
+                              <select
+                                value={rec.status}
+                                onChange={(e) => handleUpdateAttendanceRecord(rec.id, e.target.value)}
+                                className={`px-2.5 py-1 rounded-full text-xs font-bold border outline-none cursor-pointer ${
+                                  rec.status === 'present'
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                    : rec.status === 'late'
+                                    ? 'bg-orange-100 text-orange-800 border-orange-300'
+                                    : rec.status === 'excused'
+                                    ? 'bg-purple-100 text-purple-800 border-purple-300'
+                                    : rec.status === 'absent'
+                                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                    : 'bg-gray-100 text-gray-800 border-gray-300'
+                                }`}
+                              >
+                                <option value="present">حاضر ✅</option>
+                                <option value="late">متأخر ⏳</option>
+                                <option value="excused">غياب مبرر 📝</option>
+                                <option value="absent">غائب ❌</option>
+                                <option value="stopped">متوقف ⏸️</option>
+                              </select>
+                            </td>
+
+                            <td className="py-3 px-4 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAttendanceRecord(rec.id)}
+                                title="حذف السجل"
+                                className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
