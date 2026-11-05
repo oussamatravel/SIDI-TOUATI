@@ -1714,23 +1714,7 @@ function App() {
     const todayStr = format(today, 'yyyy-MM-dd');
     const greetingTime = today.getHours() < 12 ? 'صباح الخير والبركة 🌅' : 'مساء الخير والأنوار 🌙';
 
-    // 1. Leaderboard Logic (Top students by successful memorizations)
-    const studentStats = {};
-    students.forEach(s => {
-      studentStats[s.id] = { ...s, score: 0, latestMemo: null };
-    });
-    memorization.forEach(m => {
-      if (m.status === 'good' && studentStats[m.studentId]) {
-        studentStats[m.studentId].score += 1;
-        if (!studentStats[m.studentId].latestMemo) {
-          studentStats[m.studentId].latestMemo = m;
-        }
-      }
-    });
-    const leaderboard = Object.values(studentStats)
-      .filter(s => s.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
+
 
     // 2. Attendance Trend (Last 7 Days)
     const trendDays = 7;
@@ -2132,60 +2116,8 @@ function App() {
           </div>
         </div>
 
-        {/* Live Feeds: Leaderboard & Recent Memorization */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Honor Roll / Leaderboard */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-black flex items-center gap-2 text-gray-800">
-                <Trophy size={18} className="text-amber-500" />
-                <span>لوحة الشرف (أبطال التسميع والإتقان)</span>
-              </h3>
-              <span className="text-xs text-gray-400">الأكثر تميزاً</span>
-            </div>
-
-            <div className="space-y-3">
-              {leaderboard.length > 0 ? leaderboard.map((student, idx) => (
-                <div 
-                  key={student.id} 
-                  onClick={() => setSelectedStudentForDetails(student)}
-                  className="flex items-center justify-between p-3.5 bg-gradient-to-l from-amber-50/40 via-yellow-50/20 to-white border border-amber-100/80 rounded-2xl hover:shadow-md hover:border-amber-300 transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm ${
-                      idx === 0 ? 'bg-gradient-to-tr from-amber-500 to-yellow-300 text-amber-950 ring-2 ring-amber-400/50' : 
-                      idx === 1 ? 'bg-gradient-to-tr from-slate-300 to-slate-100 text-slate-800' : 
-                      idx === 2 ? 'bg-gradient-to-tr from-amber-700 to-amber-500 text-white' : 
-                      'bg-emerald-50 text-emerald-800'
-                    }`}>
-                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
-                    </div>
-                    <div>
-                      <span className="font-bold text-sm text-gray-900 group-hover:text-emerald-700 transition">
-                        {student.name}
-                      </span>
-                      <span className="text-xs text-gray-500 block mt-0.5">
-                        {student.level} • {student.branch}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="bg-amber-100 text-amber-900 px-3 py-1 rounded-full text-xs font-black shadow-sm">
-                      {student.score} تسميع متقن 🌟
-                    </span>
-                    <ChevronLeft size={16} className="text-gray-400 group-hover:text-emerald-700 group-hover:translate-x-[-3px] transition-all" />
-                  </div>
-                </div>
-              )) : (
-                <div className="text-center py-12 text-gray-400">
-                  <Trophy size={36} className="mx-auto mb-2 opacity-30 text-amber-400" />
-                  <p className="text-sm font-bold">لا يوجد إنجازات في لوحة الشرف بعد</p>
-                </div>
-              )}
-            </div>
-          </div>
-
+        {/* Recent Memorization Feed */}
+        <div className="w-full">
           {/* Recent Memorization Feed */}
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
