@@ -16,10 +16,13 @@ import {
   AlertCircle,
   FileText,
   X,
-  ChevronDown
+  ChevronDown,
+  Calendar,
+  Filter,
+  RotateCcw
 } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx-js-style';
 
@@ -36,6 +39,8 @@ export default function SubscriptionsTab({
   schoolBranches = [],
   studentLevels = []
 }) {
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+
   const [selectedYear, setSelectedYear] = useState('2025-2026');
   const [statusFilter, setStatusFilter] = useState('All');
   const [branchFilter, setBranchFilter] = useState('All');
@@ -43,23 +48,37 @@ export default function SubscriptionsTab({
   const [teacherFilter, setTeacherFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [defaultAmount, setDefaultAmount] = useState(2000);
+
+  // Date Filtering States
+  const [dateFilterType, setDateFilterType] = useState('all'); // 'all' | 'today' | 'specific' | 'range'
+  const [filterSpecificDate, setFilterSpecificDate] = useState(todayStr);
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
   
+  // Modals & Feedback
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [currentStudent, setCurrentStudent] = useState(null);
   const [currentSub, setCurrentSub] = useState(null);
   const [loadingAction, setLoadingAction] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 3000);
+  };
 
   const [formData, setFormData] = useState({
     status: 'paid',
     amount: 2000,
     paidAmount: 2000,
-    paidDate: format(new Date(), 'yyyy-MM-dd'),
+    paidDate: todayStr,
     paymentMethod: 'cash',
     receiptNumber: '',
     notes: ''
   });
 
+  // Map of studentId -> subscription for the selected school year
   const subMap = useMemo(() => {
     const map = {};
     subscriptions.forEach(sub => {
@@ -70,6 +89,66 @@ export default function SubscriptionsTab({
     return map;
   }, [subscriptions, selectedYear]);
 
+  // Overall KPIs: Daily Total, Cumulative Total, Counts
+  const kpis = useMemo(() => {
+    let totalStudents = students.length;
+    let paidCount = 0;
+    let partialCount = 0;
+    let unpaidCount = 0;
+    let totalCumulative = 0; // Total cumulé
+    let totalExpected = 0;
+    let todayTotal = 0; // Total journalier (today)
+    let todayCount = 0;
+    let specificDayTotal = 0;
+    let specificDayCount = 0;
+
+    students.forEach(s => {
+      const sub = subMap[s.id];
+      const status = sub ? sub.status : 'unpaid';
+      const expected = sub ? (Number(sub.amount) || defaultAmount) : defaultAmount;
+      totalExpected += expected;
+
+      if (status === 'paid' || status === 'partial') {
+        const amt = Number(sub?.paidAmount ?? (status === 'paid' ? expected : 0));
+        totalCumulative += amt;
+
+        if (status === 'paid') paidCount++;
+        if (status === 'partial') partialCount++;
+
+        if (sub?.paidDate === todayStr) {
+          todayTotal += amt;
+          todayCount++;
+        }
+
+        if (sub?.paidDate === filterSpecificDate) {
+          specificDayTotal += amt;
+          specificDayCount++;
+        }
+      } else {
+        unpaidCount++;
+      }
+    });
+
+    const completionRate = totalStudents > 0 
+      ? Math.round(((paidCount + partialCount * 0.5) / totalStudents) * 100) 
+      : 0;
+
+    return {
+      totalStudents,
+      paidCount,
+      partialCount,
+      unpaidCount,
+      totalCumulative,
+      totalExpected,
+      completionRate,
+      todayTotal,
+      todayCount,
+      specificDayTotal,
+      specificDayCount
+    };
+  }, [students, subMap, defaultAmount, todayStr, filterSpecificDate]);
+
+  // Filter students by Search, Branch, Level, Teacher, Status, and Payment Date
   const filteredStudents = useMemo(() => {
     return students.filter(student => {
       if (branchFilter !== 'All' && student.branch !== branchFilter) return false;
@@ -87,55 +166,46 @@ export default function SubscriptionsTab({
       const status = sub ? sub.status : 'unpaid';
       if (statusFilter !== 'All' && status !== statusFilter) return false;
 
+      // Date Filtering
+      if (dateFilterType === 'today') {
+        if (!sub || (sub.status !== 'paid' && sub.status !== 'partial') || sub.paidDate !== todayStr) {
+          return false;
+        }
+      } else if (dateFilterType === 'specific') {
+        if (filterSpecificDate) {
+          if (!sub || (sub.status !== 'paid' && sub.status !== 'partial') || sub.paidDate !== filterSpecificDate) {
+            return false;
+          }
+        }
+      } else if (dateFilterType === 'range') {
+        if (!sub || (sub.status !== 'paid' && sub.status !== 'partial') || !sub.paidDate) {
+          return false;
+        }
+        if (filterDateFrom && sub.paidDate < filterDateFrom) return false;
+        if (filterDateTo && sub.paidDate > filterDateTo) return false;
+      }
+
       return true;
     });
-  }, [students, subMap, branchFilter, levelFilter, teacherFilter, searchQuery, statusFilter]);
+  }, [students, subMap, branchFilter, levelFilter, teacherFilter, searchQuery, statusFilter, dateFilterType, todayStr, filterSpecificDate, filterDateFrom, filterDateTo]);
 
-  const kpis = useMemo(() => {
-    let totalStudents = students.length;
-    let paidCount = 0;
-    let partialCount = 0;
-    let unpaidCount = 0;
-    let totalCollected = 0;
-    let totalExpected = 0;
-
-    students.forEach(s => {
+  // Total for currently filtered students
+  const filteredTotalCollected = useMemo(() => {
+    return filteredStudents.reduce((acc, s) => {
       const sub = subMap[s.id];
-      const status = sub ? sub.status : 'unpaid';
-      const expected = sub ? (Number(sub.amount) || defaultAmount) : defaultAmount;
-      totalExpected += expected;
-
-      if (status === 'paid') {
-        paidCount++;
-        totalCollected += Number(sub?.paidAmount ?? expected);
-      } else if (status === 'partial') {
-        partialCount++;
-        totalCollected += Number(sub?.paidAmount || 0);
-      } else {
-        unpaidCount++;
+      if (sub && (sub.status === 'paid' || sub.status === 'partial')) {
+        return acc + Number(sub.paidAmount ?? (sub.status === 'paid' ? (sub.amount || defaultAmount) : 0));
       }
-    });
+      return acc;
+    }, 0);
+  }, [filteredStudents, subMap, defaultAmount]);
 
-    const completionRate = totalStudents > 0 
-      ? Math.round(((paidCount + partialCount * 0.5) / totalStudents) * 100) 
-      : 0;
-
-    return {
-      totalStudents,
-      paidCount,
-      partialCount,
-      unpaidCount,
-      totalCollected,
-      totalExpected,
-      completionRate
-    };
-  }, [students, subMap, defaultAmount]);
-
-  const handleQuickPay = async (student) => {
+  // Quick Pay Handler (with optional custom date)
+  const handleQuickPay = async (student, customDate = null) => {
     try {
       setLoadingAction(true);
       const subId = `${student.id}_${selectedYear}`;
-      const now = format(new Date(), 'yyyy-MM-dd');
+      const dateToUse = customDate || todayStr;
       const randomReceipt = `REC-${format(new Date(), 'yyMM')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
       const subData = {
@@ -146,10 +216,10 @@ export default function SubscriptionsTab({
         status: 'paid',
         amount: Number(defaultAmount),
         paidAmount: Number(defaultAmount),
-        paidDate: now,
+        paidDate: dateToUse,
         paymentMethod: 'cash',
         receiptNumber: randomReceipt,
-        notes: 'تسديد سريع',
+        notes: 'تسديد اشتراك',
         branch: student.branch || '',
         level: student.level || '',
         teacherId: student.teacherId || '',
@@ -157,6 +227,7 @@ export default function SubscriptionsTab({
       };
 
       await setDoc(doc(db, 'subscriptions', subId), subData);
+      showToast(`تم تسديد اشتراك الطالب ${student.name} بتاريخ ${dateToUse}`);
     } catch (err) {
       console.error('Error saving quick subscription:', err);
       alert('حدث خطأ أثناء تسجيل الدفع: ' + (err.message || ''));
@@ -165,6 +236,34 @@ export default function SubscriptionsTab({
     }
   };
 
+  // Direct Update of Paid Date for candidates who already paid
+  const handleUpdatePaidDate = async (student, sub, newDate) => {
+    if (!newDate) return;
+    try {
+      const subId = sub?.id || `${student.id}_${selectedYear}`;
+      await setDoc(doc(db, 'subscriptions', subId), {
+        ...(sub || {}),
+        studentId: student.id,
+        studentName: student.name || '',
+        studentCode: student.code || '',
+        year: selectedYear,
+        status: sub?.status || 'paid',
+        amount: sub?.amount ?? Number(defaultAmount),
+        paidAmount: sub?.paidAmount ?? Number(defaultAmount),
+        paidDate: newDate,
+        branch: student.branch || '',
+        level: student.level || '',
+        teacherId: student.teacherId || '',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      showToast(`تم تحديث تاريخ دفع الطالب ${student.name} إلى ${newDate}`);
+    } catch (err) {
+      console.error('Error updating payment date:', err);
+      alert('حدث خطأ أثناء تحديث تاريخ الدفع: ' + (err.message || ''));
+    }
+  };
+
+  // Open Edit Modal
   const handleOpenEdit = (student, existingSub) => {
     setCurrentStudent(student);
     setCurrentSub(existingSub || null);
@@ -174,7 +273,7 @@ export default function SubscriptionsTab({
         status: existingSub.status || 'paid',
         amount: existingSub.amount ?? defaultAmount,
         paidAmount: existingSub.paidAmount ?? defaultAmount,
-        paidDate: existingSub.paidDate || format(new Date(), 'yyyy-MM-dd'),
+        paidDate: existingSub.paidDate || todayStr,
         paymentMethod: existingSub.paymentMethod || 'cash',
         receiptNumber: existingSub.receiptNumber || '',
         notes: existingSub.notes || ''
@@ -184,7 +283,7 @@ export default function SubscriptionsTab({
         status: 'paid',
         amount: defaultAmount,
         paidAmount: defaultAmount,
-        paidDate: format(new Date(), 'yyyy-MM-dd'),
+        paidDate: todayStr,
         paymentMethod: 'cash',
         receiptNumber: `REC-${format(new Date(), 'yyMM')}-${Math.floor(1000 + Math.random() * 9000)}`,
         notes: ''
@@ -193,6 +292,7 @@ export default function SubscriptionsTab({
     setIsEditModalOpen(true);
   };
 
+  // Save Modal
   const handleSaveModal = async (e) => {
     e.preventDefault();
     if (!currentStudent) return;
@@ -221,6 +321,7 @@ export default function SubscriptionsTab({
 
       await setDoc(doc(db, 'subscriptions', subId), subData);
       setIsEditModalOpen(false);
+      showToast(`تم حفظ بيانات الاشتراك وتاريخ الدفع (${formData.paidDate})`);
     } catch (err) {
       console.error('Error saving subscription:', err);
       alert('خطأ أثناء الحفظ: ' + (err.message || ''));
@@ -229,12 +330,14 @@ export default function SubscriptionsTab({
     }
   };
 
+  // Delete Subscription
   const handleDeleteSub = async (student, sub) => {
     if (!window.confirm(`هل أنت متأكد من إلغاء تسديد الاشتراك للطالب: ${student.name}؟`)) return;
     try {
       setLoadingAction(true);
       const subId = sub?.id || `${student.id}_${selectedYear}`;
       await deleteDoc(doc(db, 'subscriptions', subId));
+      showToast(`تم إلغاء تسديد الاشتراك للطالب ${student.name}`);
     } catch (err) {
       console.error('Error deleting subscription:', err);
       alert('خطأ أثناء إلغاء الاشتراك: ' + (err.message || ''));
@@ -243,12 +346,14 @@ export default function SubscriptionsTab({
     }
   };
 
+  // Open Receipt
   const handleOpenReceipt = (student, sub) => {
     setCurrentStudent(student);
     setCurrentSub(sub);
     setIsReceiptModalOpen(true);
   };
 
+  // Export to Excel
   const handleExportExcel = () => {
     try {
       const rows = filteredStudents.map((s, index) => {
@@ -303,7 +408,8 @@ export default function SubscriptionsTab({
       ws['!cols'] = colWidths;
 
       XLSX.utils.book_append_sheet(wb, ws, `اشتراكات_${selectedYear}`);
-      const fileName = `تقرير_الاشتراكات_${selectedYear}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+      const dateSuffix = dateFilterType === 'today' ? `_اليوم_${todayStr}` : (dateFilterType === 'specific' ? `_${filterSpecificDate}` : '');
+      const fileName = `تقرير_الاشتراكات_${selectedYear}${dateSuffix}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
       XLSX.writeFile(wb, fileName);
     } catch (err) {
       console.error('Export Excel error:', err);
@@ -313,6 +419,14 @@ export default function SubscriptionsTab({
 
   return (
     <div className="space-y-6 pb-12 rtl text-right">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-6 z-50 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-gray-700 animate-in fade-in slide-in-from-bottom duration-300">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+          <span className="text-sm font-medium">{toastMessage}</span>
+        </div>
+      )}
+
       {/* Top Banner & Title */}
       <div className="bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-700 rounded-3xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
@@ -327,7 +441,7 @@ export default function SubscriptionsTab({
               </h1>
             </div>
             <p className="text-emerald-100 text-sm md:text-base max-w-xl">
-              إدارة وتحصيل الاشتراكات والرسوم السنوية، متابعة الطلاب المسددين وغير المسددين، واستخراج تقارير وإيصالات الدفع.
+              إدارة وتحصيل الاشتراكات والرسوم السنوية، متابعة المداخيل اليومية والتراكمية، تصفية المدفوعات حسب التاريخ، واستخراج تقارير وإيصالات الدفع.
             </p>
           </div>
 
@@ -370,63 +484,101 @@ export default function SubscriptionsTab({
         </div>
       </div>
 
-      {/* KPI Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
-            <Coins className="w-6 h-6" />
+      {/* Financial Totals: Daily & Cumulative Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Journalier (اليومي) */}
+        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-5 rounded-2xl shadow-md text-white relative overflow-hidden">
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="flex items-center gap-1.5 text-emerald-100 text-xs font-bold mb-1">
+                <Calendar className="w-4 h-4" />
+                <span>المجموع اليومي (اليوم)</span>
+              </div>
+              <p className="text-2xl lg:text-3xl font-black tracking-tight">
+                {kpis.todayTotal.toLocaleString()} <span className="text-sm font-normal">د.ج</span>
+              </p>
+            </div>
+            <span className="p-2.5 bg-white/20 rounded-2xl">
+              <Coins className="w-5 h-5 text-white" />
+            </span>
           </div>
-          <div>
-            <p className="text-xs text-gray-500 font-medium">إجمالي الطلاب</p>
-            <p className="text-2xl font-black text-gray-800 mt-0.5">{kpis.totalStudents}</p>
-            <p className="text-[11px] text-gray-400">في النطاق المحدد</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs text-emerald-700 font-medium">تم الدفع (مسدد)</p>
-            <p className="text-2xl font-black text-emerald-600 mt-0.5">{kpis.paidCount}</p>
-            <p className="text-[11px] text-emerald-600/80 font-medium">
-              {kpis.totalStudents > 0 ? Math.round((kpis.paidCount / kpis.totalStudents) * 100) : 0}% من الطلاب
-            </p>
+          <div className="mt-3 pt-3 border-t border-white/20 flex items-center justify-between text-xs text-emerald-100">
+            <span>{kpis.todayCount} عملية دفع اليوم</span>
+            <span className="font-mono text-[11px] opacity-80">{todayStr}</span>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl">
-            <XCircle className="w-6 h-6" />
+        {/* Total Cumulé (التراكمي) */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="flex items-center gap-1.5 text-amber-700 text-xs font-bold mb-1">
+                <Wallet className="w-4 h-4" />
+                <span>المجموع التراكمي (السنة)</span>
+              </div>
+              <p className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
+                {kpis.totalCumulative.toLocaleString()} <span className="text-sm font-normal text-gray-500">د.ج</span>
+              </p>
+            </div>
+            <span className="p-2.5 bg-amber-50 text-amber-600 rounded-2xl">
+              <TrendingUp className="w-5 h-5" />
+            </span>
           </div>
-          <div>
-            <p className="text-xs text-rose-700 font-medium">غير مسدد</p>
-            <p className="text-2xl font-black text-rose-600 mt-0.5">{kpis.unpaidCount}</p>
-            <p className="text-[11px] text-rose-600/80 font-medium">
-              {kpis.totalStudents > 0 ? Math.round((kpis.unpaidCount / kpis.totalStudents) * 100) : 0}% متبقي
-            </p>
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+            <span>المتوقع: {kpis.totalExpected.toLocaleString()} د.ج</span>
+            <span className="font-bold text-emerald-600">{kpis.completionRate}% محصل</span>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
-            <Wallet className="w-6 h-6" />
+        {/* Filtered Total / Total Selon Filtre */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="flex items-center gap-1.5 text-blue-700 text-xs font-bold mb-1">
+                <Filter className="w-4 h-4" />
+                <span>مجموع النتائج المعروضة</span>
+              </div>
+              <p className="text-2xl lg:text-3xl font-black text-blue-700 tracking-tight">
+                {filteredTotalCollected.toLocaleString()} <span className="text-sm font-normal text-gray-500">د.ج</span>
+              </p>
+            </div>
+            <span className="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
+              <CheckCircle2 className="w-5 h-5" />
+            </span>
           </div>
-          <div>
-            <p className="text-xs text-amber-700 font-medium">إجمالي المداخيل المحصلة</p>
-            <p className="text-xl md:text-2xl font-black text-amber-700 mt-0.5">
-              {kpis.totalCollected.toLocaleString()} <span className="text-xs font-normal">د.ج</span>
-            </p>
-            <p className="text-[11px] text-gray-400">
-              المتوقع: {kpis.totalExpected.toLocaleString()} د.ج
-            </p>
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+            <span>{filteredStudents.length} طالب في النطاق</span>
+            <span className="text-blue-600 font-bold">
+              {filteredStudents.filter(s => subMap[s.id]?.status === 'paid' || subMap[s.id]?.status === 'partial').length} مسددين
+            </span>
+          </div>
+        </div>
+
+        {/* Students Stats */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs text-gray-500 font-bold mb-1">وضعية اشتراكات الطلاب</p>
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-600 font-black text-xl">{kpis.paidCount} دفع</span>
+                <span className="text-gray-300">/</span>
+                <span className="text-rose-600 font-black text-xl">{kpis.unpaidCount} لم يدفع</span>
+              </div>
+            </div>
+            <span className="p-2.5 bg-gray-50 text-gray-600 rounded-2xl">
+              <Coins className="w-5 h-5" />
+            </span>
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+            <span>إجمالي: {kpis.totalStudents} طالب</span>
+            {kpis.partialCount > 0 && <span className="text-amber-600 font-bold">{kpis.partialCount} جزئي</span>}
           </div>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
+      {/* Filter and Search Bar with Date Filtering Section */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+        {/* Status and Default Amount row */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold text-gray-500 ml-2">الحالة:</span>
@@ -487,6 +639,125 @@ export default function SubscriptionsTab({
           </div>
         </div>
 
+        {/* Date Filter Section (تصفية حسب تاريخ الدفع) */}
+        <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100/80 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-extrabold text-emerald-900">
+              <Calendar className="w-4 h-4 text-emerald-700" />
+              <span>تصفية المدفوعات حسب التاريخ:</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setDateFilterType('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                  dateFilterType === 'all'
+                    ? 'bg-emerald-700 text-white shadow-sm'
+                    : 'bg-white text-gray-700 hover:bg-emerald-100 border border-emerald-200'
+                }`}
+              >
+                جميع التواريخ
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDateFilterType('today')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
+                  dateFilterType === 'today'
+                    ? 'bg-emerald-700 text-white shadow-sm'
+                    : 'bg-white text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                اليوم ({kpis.todayCount})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDateFilterType('specific')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                  dateFilterType === 'specific'
+                    ? 'bg-emerald-700 text-white shadow-sm'
+                    : 'bg-white text-gray-700 hover:bg-emerald-100 border border-emerald-200'
+                }`}
+              >
+                تاريخ محدد
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDateFilterType('range')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                  dateFilterType === 'range'
+                    ? 'bg-emerald-700 text-white shadow-sm'
+                    : 'bg-white text-gray-700 hover:bg-emerald-100 border border-emerald-200'
+                }`}
+              >
+                فترة محددة (من - إلى)
+              </button>
+
+              {dateFilterType !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFilterType('all');
+                    setFilterDateFrom('');
+                    setFilterDateTo('');
+                  }}
+                  className="p-1.5 text-gray-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                  title="إلغاء فلتر التاريخ"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Conditional Date Pickers based on active filter */}
+          {dateFilterType === 'specific' && (
+            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-emerald-100 text-xs">
+              <span className="text-gray-700 font-medium">اختر التاريخ:</span>
+              <input
+                type="date"
+                value={filterSpecificDate}
+                onChange={(e) => setFilterSpecificDate(e.target.value)}
+                className="px-3 py-1.5 bg-white border border-gray-300 rounded-xl font-bold text-gray-800 outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <span className="text-emerald-800 font-bold bg-white px-3 py-1.5 rounded-xl border border-emerald-200">
+                مجموع هذا اليوم: {kpis.specificDayTotal.toLocaleString()} د.ج ({kpis.specificDayCount} طلاب)
+              </span>
+            </div>
+          )}
+
+          {dateFilterType === 'range' && (
+            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-emerald-100 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-700 font-medium">من:</span>
+                <input
+                  type="date"
+                  value={filterDateFrom}
+                  onChange={(e) => setFilterDateFrom(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-xl font-medium text-gray-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-700 font-medium">إلى:</span>
+                <input
+                  type="date"
+                  value={filterDateTo}
+                  onChange={(e) => setFilterDateTo(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-xl font-medium text-gray-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <span className="text-emerald-800 font-bold bg-white px-3 py-1.5 rounded-xl border border-emerald-200">
+                مجموع الفترة: {filteredTotalCollected.toLocaleString()} د.ج
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* General Search & Selection Filters */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="relative">
             <Search className="absolute right-3 top-3 text-gray-400 w-4 h-4" />
@@ -551,10 +822,17 @@ export default function SubscriptionsTab({
 
       {/* Students Subscriptions List Table */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-4 bg-gray-50/60 border-b border-gray-100 flex items-center justify-between">
-          <p className="text-sm font-bold text-gray-700">
-            قائمة الطلاب ({filteredStudents.length})
-          </p>
+        <div className="p-4 bg-gray-50/60 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-bold text-gray-700">
+              قائمة الطلاب ({filteredStudents.length})
+            </p>
+            {dateFilterType !== 'all' && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                مفلتر حسب التاريخ: {dateFilterType === 'today' ? 'اليوم' : (dateFilterType === 'specific' ? filterSpecificDate : `من ${filterDateFrom || '...'} إلى ${filterDateTo || '...'}`)}
+              </span>
+            )}
+          </div>
           <span className="text-xs text-gray-500">
             السنة الدراسية: <strong className="text-emerald-700">{selectedYear}</strong>
           </span>
@@ -564,7 +842,7 @@ export default function SubscriptionsTab({
           <div className="p-12 text-center text-gray-400">
             <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-20" />
             <p className="text-base font-bold">لا يوجد طلاب يطابقون خيارات البحث أو التصفية</p>
-            <p className="text-xs mt-1 text-gray-400">جرب تغيير الفلاتر أو البحث عن اسم آخر</p>
+            <p className="text-xs mt-1 text-gray-400">جرب تغيير الفلاتر أو تاريخ الدفع للبحث</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -575,8 +853,8 @@ export default function SubscriptionsTab({
                   <th className="py-3 px-4">المستوى & الفرع</th>
                   <th className="py-3 px-4">الأستاذ</th>
                   <th className="py-3 px-4 text-center">حالة الاشتراك</th>
-                  <th className="py-3 px-4 text-center">المبلغ</th>
-                  <th className="py-3 px-4">تاريخ & وصل الدفع</th>
+                  <th className="py-3 px-4 text-center">المبلغ المدفوع</th>
+                  <th className="py-3 px-4">تاريخ الدفع (قابل للتعديل 📅)</th>
                   <th className="py-3 px-4 text-center">الإجراءات</th>
                 </tr>
               </thead>
@@ -595,11 +873,13 @@ export default function SubscriptionsTab({
                         isPaid ? 'bg-emerald-50/20' : (isPartial ? 'bg-amber-50/20' : '')
                       }`}
                     >
+                      {/* Student info */}
                       <td className="py-3.5 px-4">
                         <div className="font-bold text-gray-900">{student.name}</div>
                         <div className="text-xs text-gray-400 font-mono mt-0.5">#{student.code || 'بدون كود'}</div>
                       </td>
 
+                      {/* Level & Branch */}
                       <td className="py-3.5 px-4 text-xs">
                         <span className="inline-block px-2.5 py-0.5 bg-gray-100 text-gray-700 rounded-md font-semibold mb-1">
                           {student.level || 'غير محدد'}
@@ -607,10 +887,12 @@ export default function SubscriptionsTab({
                         <div className="text-gray-500">{student.branch || '-'}</div>
                       </td>
 
+                      {/* Teacher */}
                       <td className="py-3.5 px-4 text-xs text-gray-600">
                         {teacher ? teacher.name : '-'}
                       </td>
 
+                      {/* Status */}
                       <td className="py-3.5 px-4 text-center">
                         {isPaid && (
                           <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full">
@@ -632,6 +914,7 @@ export default function SubscriptionsTab({
                         )}
                       </td>
 
+                      {/* Amount */}
                       <td className="py-3.5 px-4 text-center text-xs">
                         {sub ? (
                           <div>
@@ -652,27 +935,46 @@ export default function SubscriptionsTab({
                         )}
                       </td>
 
+                      {/* Payment Date: Interactive editable date for paid/partial students */}
                       <td className="py-3.5 px-4 text-xs">
-                        {sub?.paidDate ? (
-                          <div>
-                            <div className="font-bold text-gray-800">{sub.paidDate}</div>
-                            {sub.receiptNumber && (
-                              <div className="text-[11px] text-emerald-700 font-mono mt-0.5">
-                                وصل: {sub.receiptNumber}
+                        {isPaid || isPartial ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="date"
+                                value={sub?.paidDate || todayStr}
+                                onChange={(e) => handleUpdatePaidDate(student, sub, e.target.value)}
+                                className="px-2 py-1 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm cursor-pointer hover:border-emerald-500 transition"
+                                title="تعديل تاريخ الدفع فورياً"
+                              />
+                            </div>
+                            {sub?.receiptNumber && (
+                              <div className="text-[11px] text-emerald-700 font-mono font-medium">
+                                وصل: #{sub.receiptNumber}
                               </div>
                             )}
                           </div>
                         ) : (
-                          <span className="text-gray-400">-</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-400 text-xs">-</span>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(student, null)}
+                              className="text-[11px] text-emerald-700 hover:underline font-bold"
+                            >
+                              + تحديد تاريخ ودفع
+                            </button>
+                          </div>
                         )}
                       </td>
 
+                      {/* Action buttons */}
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           {!isPaid && (
                             <button
                               onClick={() => handleQuickPay(student)}
-                              title="تسجيل دفع سريع بالمبلغ الافتراضي"
+                              title="تسديد فوري بتاريخ اليوم بالمبلغ الافتراضي"
                               disabled={loadingAction}
                               className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm transition active:scale-95"
                             >
@@ -683,7 +985,7 @@ export default function SubscriptionsTab({
 
                           <button
                             onClick={() => handleOpenEdit(student, sub)}
-                            title="تعديل التفاصيل أو الدفع الجزئي"
+                            title="تعديل تاريخ الدفع والمبلغ والتفاصيل"
                             className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition"
                           >
                             <Edit3 className="w-4 h-4" />
@@ -726,7 +1028,7 @@ export default function SubscriptionsTab({
             <div className="p-6 bg-gradient-to-r from-emerald-600 to-teal-600 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-black">
-                  {currentSub ? 'تعديل بيانات الاشتراك السنوي' : 'تسجيل اشتراك سنوي جديد'}
+                  {currentSub ? 'تعديل بيانات الاشتراك وتاريخ الدفع' : 'تسجيل اشتراك سنوي جديد'}
                 </h3>
                 <p className="text-xs text-emerald-100 mt-1">
                   الطالب: <strong className="text-white">{currentStudent.name}</strong> ({currentStudent.level})
@@ -796,15 +1098,19 @@ export default function SubscriptionsTab({
                 </div>
               </div>
 
+              {/* Date of payment is clearly editable here */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">تاريخ الدفع</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>تاريخ الدفع (قابل للتعديل)</span>
+                  </label>
                   <input
                     type="date"
                     required
                     value={formData.paidDate}
                     onChange={(e) => setFormData({ ...formData, paidDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-medium text-gray-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-emerald-500 bg-emerald-50/30"
                   />
                 </div>
 
@@ -858,7 +1164,7 @@ export default function SubscriptionsTab({
                   className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold shadow-md transition active:scale-95 flex items-center gap-2"
                 >
                   <Check className="w-4 h-4" />
-                  حفظ البيانات
+                  حفظ التعديلات
                 </button>
               </div>
             </form>
@@ -866,37 +1172,37 @@ export default function SubscriptionsTab({
         </div>
       )}
 
-      {/* Printable Receipt Modal */}
+      {/* Receipt Printable Modal */}
       {isReceiptModalOpen && currentStudent && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden print:p-0 print:shadow-none animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-4 bg-gray-100 border-b flex items-center justify-between print:hidden">
-              <span className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                <Printer className="w-4 h-4 text-emerald-600" />
-                معاينة وصل تسديد الاشتراك
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 bg-gray-900 text-white flex items-center justify-between">
+              <span className="text-sm font-bold flex items-center gap-2">
+                <Printer className="w-4 h-4 text-emerald-400" />
+                وصل استلام الاشتراك
               </span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => window.print()}
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition"
+                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs font-bold transition flex items-center gap-1"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  طباعة الآن
+                  طباعة
                 </button>
                 <button
                   onClick={() => setIsReceiptModalOpen(false)}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded-xl"
+                  className="p-1 hover:bg-white/20 rounded-lg transition"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            <div className="p-8 text-right space-y-6 border-4 border-double border-emerald-700 m-4 rounded-2xl">
+            <div id="receipt-print-area" className="p-8 space-y-6 text-gray-800 bg-white">
               <div className="text-center border-b pb-4">
-                <h2 className="text-xl font-black text-emerald-800">مدرسة تعليم القرآن الكريم</h2>
-                <p className="text-xs text-gray-500 mt-1">{currentStudent.branch || 'المقر الرئيسي'}</p>
-                <div className="inline-block mt-3 px-6 py-1 bg-emerald-100 text-emerald-900 rounded-full text-sm font-extrabold">
+                <div className="text-lg font-black text-emerald-800">مدرسة تعليم القرآن الكريم</div>
+                <div className="text-xs text-gray-500 mt-0.5">{currentStudent.branch || 'الفرع الرئيسي'}</div>
+                <div className="inline-block mt-2 px-3 py-1 bg-emerald-50 text-emerald-800 rounded-full font-bold text-xs border border-emerald-200">
                   وصل استلام اشتراك سنوي ({selectedYear})
                 </div>
               </div>
@@ -906,7 +1212,7 @@ export default function SubscriptionsTab({
                   رقم الوصل: <strong className="font-mono text-gray-900">{currentSub?.receiptNumber || 'REC-XXXX'}</strong>
                 </div>
                 <div>
-                  تاريخ التسديد: <strong className="text-gray-900">{currentSub?.paidDate || format(new Date(), 'yyyy-MM-dd')}</strong>
+                  تاريخ التسديد: <strong className="text-gray-900">{currentSub?.paidDate || todayStr}</strong>
                 </div>
               </div>
 
