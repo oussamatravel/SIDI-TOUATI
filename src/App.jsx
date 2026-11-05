@@ -1758,9 +1758,6 @@ function App() {
     const subRate = students.length > 0 ? Math.round((paidSubsCount / students.length) * 100) : 0;
 
     // 4. Quranic Milestone Metrics
-    const memoHizbsCount = memorization.filter(m => m.memoType === 'hizb' || m.hizb).length;
-    const estimatedHizbsTotal = memoHizbsCount + Math.floor(memorization.filter(m => m.memoType === 'surah' || m.surah).length * 0.4);
-    const khatmahsEquiv = (estimatedHizbsTotal / 60).toFixed(1);
     const examsPassedCount = exams.filter(e => Number(e.score) >= 70).length;
 
     // 5. Smart Notifications Logic
@@ -2079,41 +2076,46 @@ function App() {
         </div>
 
         {/* School Quranic Milestone Showcase Banner */}
-        <div className="relative bg-gradient-to-r from-emerald-50 via-teal-50 to-amber-50/70 rounded-[2rem] p-6 md:p-7 border border-emerald-200/70 shadow-sm overflow-hidden">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-emerald-700 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-700/20 flex-shrink-0">
-                <Medal size={26} />
+        <div className="relative bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 text-white rounded-[2rem] p-6 md:p-8 border border-emerald-500/30 shadow-xl overflow-hidden">
+          {/* Subtle Ambient Radial Lighting */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6">
+            <div className="flex items-start md:items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/25 flex-shrink-0">
+                <BookOpen size={28} />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="font-black text-base md:text-lg text-slate-900">حصاد الإنجاز القرآني التراكمي بالمدرسة</h4>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-bold px-3 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                    فضل تعلّم القرآن وتلاوته
+                  </span>
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-white/10 text-emerald-200">
                     موسم 2025-2026
                   </span>
                 </div>
-                <p className="text-xs text-slate-600 mt-1 font-medium leading-relaxed">
-                  « إِنَّ هَٰذَا الْقُرْآنَ يَهْدِي لِلَّتِي هِيَ أَقْوَمُ » — حصيلة التسميعات والسبر المحققة في حلقاتنا المباركة.
+                
+                {/* Ayah on learning and teaching the Quran */}
+                <h3 className="font-serif text-lg md:text-2xl font-black text-amber-200 tracking-wide leading-relaxed">
+                  ﴿ الرَّحْمَٰنُ ۝ عَلَّمَ الْقُرْآنَ ۝ خَلَقَ الْإِنسَانَ ۝ عَلَّمَهُ الْبَيَانَ ﴾
+                </h3>
+                <p className="text-xs md:text-sm text-emerald-100/90 font-medium leading-relaxed">
+                  ﴿ وَلَقَدْ يَسَّرْنَا الْقُرْآنَ لِلذِّكْرِ فَهَلْ مِن مُّدَّكِرٍ ﴾ <span className="text-emerald-400/80">[القمر: 17]</span> • حصاد التسميعات والسبر المحققة في رحاب مدرستنا المباركة.
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto text-center">
-              <div className="bg-white/90 p-3.5 rounded-2xl border border-emerald-100 shadow-sm">
-                <p className="text-[11px] text-slate-500 font-bold">جلسات التسميع</p>
-                <p className="text-xl font-black text-emerald-800 mt-0.5">{memorization.length}</p>
+            <div className="grid grid-cols-2 gap-3 w-full lg:w-auto text-center flex-shrink-0">
+              <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/15 min-w-[130px]">
+                <p className="text-[11px] text-emerald-300 font-bold">جلسات التسميع</p>
+                <p className="text-2xl font-black text-white mt-1">{memorization.length}</p>
+                <span className="text-[10px] text-slate-300">جلسة مسجلة</span>
               </div>
-              <div className="bg-white/90 p-3.5 rounded-2xl border border-emerald-100 shadow-sm">
-                <p className="text-[11px] text-slate-500 font-bold">الأحزاب المتقنة</p>
-                <p className="text-xl font-black text-emerald-800 mt-0.5">{estimatedHizbsTotal} حزب</p>
-              </div>
-              <div className="bg-white/90 p-3.5 rounded-2xl border border-emerald-100 shadow-sm">
-                <p className="text-[11px] text-slate-500 font-bold">ما يعادل تقريباً</p>
-                <p className="text-xl font-black text-amber-600 mt-0.5">{Math.max(Number(khatmahsEquiv), 1)} ختمة 🌿</p>
-              </div>
-              <div className="bg-white/90 p-3.5 rounded-2xl border border-emerald-100 shadow-sm">
-                <p className="text-[11px] text-slate-500 font-bold">امتحانات وسبر ناجح</p>
-                <p className="text-xl font-black text-blue-700 mt-0.5">{examsPassedCount} سبر 📜</p>
+              <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/15 min-w-[130px]">
+                <p className="text-[11px] text-amber-300 font-bold">امتحانات وسبر ناجح</p>
+                <p className="text-2xl font-black text-white mt-1">{examsPassedCount}</p>
+                <span className="text-[10px] text-slate-300">سبر معتمد 📜</span>
               </div>
             </div>
           </div>
