@@ -1714,9 +1714,7 @@ function App() {
     const todayStr = format(today, 'yyyy-MM-dd');
     const greetingTime = today.getHours() < 12 ? 'صباح الخير والبركة 🌅' : 'مساء الخير والأنوار 🌙';
 
-
-
-    // 2. Attendance Trend (Last 7 Days)
+    // 1. Attendance Trend (Last 7 Days)
     const trendDays = 7;
     const attendanceData = [];
     const memoData = [];
@@ -1741,19 +1739,31 @@ function App() {
     const maxAtt = Math.max(...attendanceData.map(d => d.total), 1);
     const maxMemo = Math.max(...memoData.map(d => d.count), 1);
 
-    // 3. Quick stats for today
-    const presentTodayCount = attendance.filter(a => a.date === todayStr && (a.status === 'present' || a.status === 'late')).length;
+    // 2. Quick stats for today
+    const presentTodayCount = attendance.filter(a => a.date === todayStr && a.status === 'present').length;
+    const lateTodayCount = attendance.filter(a => a.date === todayStr && a.status === 'late').length;
+    const absentTodayCount = attendance.filter(a => a.date === todayStr && a.status === 'absent').length;
+    const totalTodayAttended = presentTodayCount + lateTodayCount;
+    const totalTodayRecorded = totalTodayAttended + absentTodayCount + attendance.filter(a => a.date === todayStr && a.status === 'excused').length;
+    const todayAttPercentage = students.length > 0 ? Math.round((totalTodayAttended / students.length) * 100) : 0;
+
     const memoToday = memorization.filter(m => m.date && m.date.startsWith(todayStr));
     const memoGoodToday = memoToday.filter(m => m.status === 'good').length;
 
-    // Subscriptions progress
+    // 3. Subscriptions progress
     const currentYear = '2025-2026';
     const yearSubs = subscriptions.filter(s => s.year === currentYear || !s.year);
     const paidSubsCount = yearSubs.filter(s => s.status === 'paid').length;
     const totalCollectedDzd = yearSubs.reduce((acc, s) => acc + (Number(s.paidAmount) || 0), 0);
     const subRate = students.length > 0 ? Math.round((paidSubsCount / students.length) * 100) : 0;
 
-    // 4. Smart Notifications Logic
+    // 4. Quranic Impact Metrics
+    const memoHizbsCount = memorization.filter(m => m.memoType === 'hizb' || m.hizb).length;
+    const estimatedHizbsTotal = memoHizbsCount + Math.floor(memorization.filter(m => m.memoType === 'surah' || m.surah).length * 0.4);
+    const khatmahsEquiv = (estimatedHizbsTotal / 60).toFixed(1);
+    const examsPassedCount = exams.filter(e => Number(e.score) >= 70).length;
+
+    // 5. Smart Notifications Logic
     const smartNotifications = [];
     
     students.forEach(student => {
@@ -1779,6 +1789,7 @@ function App() {
             id: `memo-${student.id}`,
             type: 'memorization',
             priority: 'high',
+            badge: 'غياب تسميع',
             student,
             message: `الطالب ${student.name} حضر 3 حصص متتالية دون تسجيل أي تسميع.`
           });
@@ -1805,6 +1816,7 @@ function App() {
           id: `exam-${student.id}`,
           type: 'exam',
           priority: 'medium',
+          badge: 'تأخر سبر',
           student,
           message: `الطالب ${student.name} لم يجرِ أي امتحان (سبر) منذ أكثر من 3 أشهر.`
         });
@@ -1822,6 +1834,7 @@ function App() {
           id: `rev-${r.id}`,
           type: 'review',
           priority: 'medium',
+          badge: 'مراجعة معلقة',
           student: s,
           message: `مراجعة متأخرة للطالب ${s?.name || 'طالب محذوف'} منذ ${daysPending} أيام.`
         });
@@ -1834,61 +1847,84 @@ function App() {
         id: `msg-unread`,
         type: 'message',
         priority: 'high',
+        badge: 'رسائل جديدة',
         tabTarget: 'messages',
         message: `لديك ${unreadMessagesCount} رسالة غير مقروءة في صندوق الوارد.`
       });
     }
 
-    // Sort by priority (high first)
     smartNotifications.sort((a, b) => (a.priority === 'high' ? -1 : 1));
 
     return (
       <div className="space-y-8 animate-in fade-in duration-300 rtl text-right">
-        {/* Top Hero Banner */}
-        <div className="relative bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 rounded-3xl p-6 md:p-8 text-white shadow-xl overflow-hidden">
-          <div className="absolute top-0 left-0 w-80 h-80 bg-white/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
-          <div className="absolute bottom-0 right-0 w-80 h-80 bg-emerald-500/20 rounded-full blur-3xl translate-x-1/3 translate-y-1/3 pointer-events-none" />
+        {/* Top Hero Showcase Banner with Arabic Pattern Glow */}
+        <div className="relative bg-gradient-to-r from-emerald-950 via-emerald-800 to-teal-900 rounded-[2rem] p-7 md:p-9 text-white shadow-2xl overflow-hidden border border-emerald-700/30">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl -translate-x-1/3 -translate-y-1/3 pointer-events-none" />
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl translate-x-1/3 translate-y-1/3 pointer-events-none" />
 
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-emerald-100 text-xs font-bold border border-white/20">
-                <Sparkles size={14} className="text-amber-300" />
-                <span>{greetingTime}</span>
-                <span className="opacity-50">•</span>
-                <span>{format(today, 'EEEE d MMMM yyyy', { locale: ar })}</span>
+            <div className="space-y-3">
+              {/* Islamic Date & Time Badge */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-emerald-200 text-xs font-bold border border-white/15 shadow-sm">
+                  <Sparkles size={14} className="text-amber-300" />
+                  <span>{greetingTime}</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold border border-emerald-400/20">
+                  <Clock size={13} />
+                  <span>{format(today, 'EEEE d MMMM yyyy', { locale: ar })}</span>
+                </span>
+                {totalTodayAttended > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/30 text-white text-xs font-bold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                    <span>الحلقات نشطة اليوم ({totalTodayAttended} حاضر)</span>
+                  </span>
+                )}
               </div>
-              <h1 className="text-2xl md:text-4xl font-black tracking-tight text-white">
-                {role === 'admin' ? 'لوحة القيادة الإدارية والتربوية' : role === 'supervisor' ? 'لوحة المتابعة والإشراف التربوي' : 'لوحة تحكم الأستاذ المعلم'}
-              </h1>
-              <p className="text-xs md:text-sm text-emerald-100 max-w-xl font-medium">
-                « وَرَتِّلِ الْقُرْآنَ تَرْتِيلاً » — متابعة إنجازات الطلاب، نشاط الحلقات اليومي، وحالة التحصيل.
-              </p>
+
+              <div>
+                <h1 className="text-2xl md:text-4xl font-black tracking-tight text-white flex items-center gap-2">
+                  <span>مدرسة سيدي تواتي لتعليم القرآن الكريم</span>
+                </h1>
+                <p className="text-xs md:text-sm text-emerald-100/90 mt-1 max-w-2xl font-medium leading-relaxed">
+                  « وَرَتِّلِ الْقُرْآنَ تَرْتِيلاً » — متابعة حلقات التحفيظ، الحضور والغياب اليومي، والتقارير التربوية والمالية الشاملة.
+                </p>
+              </div>
             </div>
 
-            {/* Quick Action Buttons */}
+            {/* Quick Action Pill Buttons */}
             <div className="flex flex-wrap items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => setActiveTab('memorization')}
-                className="px-4 py-2.5 bg-white text-emerald-800 hover:bg-emerald-50 font-bold rounded-2xl text-xs shadow-md transition-all active:scale-95 flex items-center gap-2"
+                className="px-4 py-2.5 bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-500 hover:to-yellow-400 text-amber-950 font-black rounded-2xl text-xs shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center gap-2"
               >
-                <BookOpen size={16} className="text-emerald-700" />
-                <span>تسجيل تسميع</span>
+                <BookOpen size={16} />
+                <span>تسجيل تسميع جديد</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('attendance')}
-                className="px-4 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold rounded-2xl text-xs backdrop-blur-md border border-white/25 transition-all active:scale-95 flex items-center gap-2"
+                className="px-4 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold rounded-2xl text-xs backdrop-blur-md border border-white/25 transition-all active:scale-95 flex items-center gap-2 shadow-sm"
               >
-                <CalendarCheck size={16} />
+                <CalendarCheck size={16} className="text-emerald-300" />
                 <span>حضور اليوم</span>
               </button>
 
               <button
                 type="button"
+                onClick={() => setActiveTab('subscriptions')}
+                className="px-4 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold rounded-2xl text-xs backdrop-blur-md border border-white/25 transition-all active:scale-95 flex items-center gap-2 shadow-sm"
+              >
+                <CreditCard size={16} className="text-teal-300" />
+                <span>الاشتراكات</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setIsModalOpen(true)}
-                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl text-xs shadow-md transition-all active:scale-95 flex items-center gap-2"
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl text-xs shadow-md transition-all active:scale-95 flex items-center gap-2"
               >
                 <Plus size={16} />
                 <span>طالب جديد</span>
@@ -1897,25 +1933,34 @@ function App() {
           </div>
         </div>
 
-        {/* 4 Key Metrics Cards (KPIs) */}
+        {/* 4 Interactive KPI Cards with Vibrant Floating Badges */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Students */}
           <div 
             onClick={() => setActiveTab('students')}
-            className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+            className="group relative bg-white p-6 rounded-[2rem] border border-gray-100/90 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col justify-between"
           >
-            <div className="flex justify-between items-start">
+            <div className="absolute top-0 right-0 w-28 h-28 bg-emerald-50 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-emerald-100 transition-colors" />
+            <div className="relative z-10 flex justify-between items-start">
               <div>
-                <p className="text-xs text-gray-500 font-bold">إجمالي الطلاب المسجلين</p>
-                <h3 className="text-3xl font-black text-gray-900 mt-1 tracking-tight">{students.length}</h3>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                  شؤون الطلاب
+                </span>
+                <h3 className="text-3xl md:text-4xl font-black text-gray-900 mt-2 tracking-tight">
+                  {students.length}
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">طالباً مسجلاً بالحلقات</p>
               </div>
-              <div className="p-3 bg-emerald-50 text-emerald-700 rounded-2xl group-hover:scale-110 transition-transform">
+              <div className="p-3.5 bg-gradient-to-tr from-emerald-600 to-teal-500 text-white rounded-2xl shadow-lg shadow-emerald-600/30 group-hover:scale-110 transition-transform">
                 <Users size={22} />
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-              <span>{role === 'admin' ? 'في جميع الفروع' : 'في حلقتك المشرفة'}</span>
-              <span className="text-emerald-700 font-bold group-hover:translate-x-[-4px] transition-transform inline-flex items-center gap-1">
+
+            <div className="relative z-10 mt-5 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-semibold">
+              <span className="text-gray-400 font-mono text-[11px]">
+                {SCHOOL_BRANCHES.length} فروع نشطة
+              </span>
+              <span className="text-emerald-700 font-bold group-hover:translate-x-[-4px] transition-transform flex items-center gap-1">
                 إدارة الطلاب <ArrowUpRight size={14} />
               </span>
             </div>
@@ -1924,21 +1969,38 @@ function App() {
           {/* Card 2: Attendance Today */}
           <div 
             onClick={() => setActiveTab('attendance')}
-            className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+            className="group relative bg-white p-6 rounded-[2rem] border border-gray-100/90 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col justify-between"
           >
-            <div className="flex justify-between items-start">
+            <div className="absolute top-0 right-0 w-28 h-28 bg-blue-50 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-blue-100 transition-colors" />
+            <div className="relative z-10 flex justify-between items-start">
               <div>
-                <p className="text-xs text-gray-500 font-bold">حضور اليوم</p>
-                <h3 className="text-3xl font-black text-blue-700 mt-1 tracking-tight">{presentTodayCount}</h3>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-800 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
+                  انضباط اليوم
+                </span>
+                <div className="flex items-baseline gap-2 mt-2">
+                  <h3 className="text-3xl md:text-4xl font-black text-blue-700 tracking-tight">
+                    {presentTodayCount}
+                  </h3>
+                  <span className="text-xs text-gray-400 font-medium">حاضر الآن</span>
+                </div>
+                <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden mt-2 max-w-[120px]">
+                  <div 
+                    className="h-full bg-blue-600 rounded-full transition-all duration-700" 
+                    style={{ width: `${Math.min(todayAttPercentage, 100)}%` }} 
+                  />
+                </div>
               </div>
-              <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform">
+              <div className="p-3.5 bg-gradient-to-tr from-blue-600 to-indigo-500 text-white rounded-2xl shadow-lg shadow-blue-600/30 group-hover:scale-110 transition-transform">
                 <CalendarCheck size={22} />
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-              <span>من أصل {students.length} طالب</span>
-              <span className="text-blue-600 font-bold group-hover:translate-x-[-4px] transition-transform inline-flex items-center gap-1">
-                فتح السجل <ArrowUpRight size={14} />
+
+            <div className="relative z-10 mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-semibold">
+              <span className="text-gray-500 text-[11px]">
+                {lateTodayCount > 0 ? `+${lateTodayCount} متأخر` : 'نسبة ' + todayAttPercentage + '%'}
+              </span>
+              <span className="text-blue-600 font-bold group-hover:translate-x-[-4px] transition-transform flex items-center gap-1">
+                سجل الحضور <ArrowUpRight size={14} />
               </span>
             </div>
           </div>
@@ -1946,21 +2008,33 @@ function App() {
           {/* Card 3: Memorization Today */}
           <div 
             onClick={() => setActiveTab('memorization')}
-            className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+            className="group relative bg-white p-6 rounded-[2rem] border border-gray-100/90 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col justify-between"
           >
-            <div className="flex justify-between items-start">
+            <div className="absolute top-0 right-0 w-28 h-28 bg-amber-50 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-amber-100 transition-colors" />
+            <div className="relative z-10 flex justify-between items-start">
               <div>
-                <p className="text-xs text-gray-500 font-bold">تسميعات اليوم</p>
-                <h3 className="text-3xl font-black text-amber-600 mt-1 tracking-tight">{memoToday.length}</h3>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100">
+                  تسميعات اليوم
+                </span>
+                <div className="flex items-baseline gap-2 mt-2">
+                  <h3 className="text-3xl md:text-4xl font-black text-amber-600 tracking-tight">
+                    {memoToday.length}
+                  </h3>
+                  <span className="text-xs text-amber-700 font-medium">جلسة</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">منها {memoGoodToday} متقن وممتاز ⭐</p>
               </div>
-              <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl group-hover:scale-110 transition-transform">
+              <div className="p-3.5 bg-gradient-to-tr from-amber-500 to-yellow-400 text-white rounded-2xl shadow-lg shadow-amber-500/30 group-hover:scale-110 transition-transform">
                 <BookOpen size={22} />
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-              <span className="text-amber-700 font-bold">{memoGoodToday} متقن وممتاز</span>
-              <span className="text-amber-600 font-bold group-hover:translate-x-[-4px] transition-transform inline-flex items-center gap-1">
-                التسميع <ArrowUpRight size={14} />
+
+            <div className="relative z-10 mt-5 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-semibold">
+              <span className="text-amber-800 font-bold text-[11px]">
+                {memoToday.length > 0 ? 'نشاط مستمر اليوم' : 'في انتظار التسجيل'}
+              </span>
+              <span className="text-amber-600 font-bold group-hover:translate-x-[-4px] transition-transform flex items-center gap-1">
+                تسجيل التسميع <ArrowUpRight size={14} />
               </span>
             </div>
           </div>
@@ -1968,38 +2042,90 @@ function App() {
           {/* Card 4: Subscriptions */}
           <div 
             onClick={() => setActiveTab('subscriptions')}
-            className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+            className="group relative bg-white p-6 rounded-[2rem] border border-gray-100/90 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col justify-between"
           >
-            <div className="flex justify-between items-start">
+            <div className="absolute top-0 right-0 w-28 h-28 bg-purple-50 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-purple-100 transition-colors" />
+            <div className="relative z-10 flex justify-between items-start">
               <div>
-                <p className="text-xs text-gray-500 font-bold">تحصيل الاشتراكات ({currentYear})</p>
-                <h3 className="text-3xl font-black text-purple-700 mt-1 tracking-tight">{subRate}%</h3>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-purple-800 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100">
+                  الاشتراكات ({currentYear})
+                </span>
+                <div className="flex items-baseline gap-2 mt-2">
+                  <h3 className="text-3xl md:text-4xl font-black text-purple-700 tracking-tight">
+                    {subRate}%
+                  </h3>
+                  <span className="text-xs text-purple-600 font-medium">نسبة التحصيل</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  المحصل: {totalCollectedDzd.toLocaleString()} د.ج
+                </p>
               </div>
-              <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl group-hover:scale-110 transition-transform">
+              <div className="p-3.5 bg-gradient-to-tr from-purple-600 to-indigo-600 text-white rounded-2xl shadow-lg shadow-purple-600/30 group-hover:scale-110 transition-transform">
                 <CreditCard size={22} />
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-              <span>المحصل: {totalCollectedDzd.toLocaleString()} د.ج</span>
-              <span className="text-purple-600 font-bold group-hover:translate-x-[-4px] transition-transform inline-flex items-center gap-1">
-                الاشتراكات <ArrowUpRight size={14} />
+
+            <div className="relative z-10 mt-5 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-semibold">
+              <span className="text-gray-500 text-[11px]">
+                {paidSubsCount} مسدد من أصل {students.length}
+              </span>
+              <span className="text-purple-600 font-bold group-hover:translate-x-[-4px] transition-transform flex items-center gap-1">
+                صندوق الاشتراكات <ArrowUpRight size={14} />
               </span>
             </div>
           </div>
         </div>
 
-        {/* Smart Notifications & Follow-Up Section */}
-        {smartNotifications.length > 0 ? (
-          <div className="bg-gradient-to-l from-orange-50/70 via-amber-50/40 to-white rounded-3xl p-5 md:p-6 border border-orange-200/80 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm md:text-base font-bold flex items-center gap-2 text-orange-800">
-                <BellRing size={18} className="text-orange-600 animate-bounce" />
-                <span>تنبيهات المتابعة التربوية الذكية ({smartNotifications.length})</span>
-              </h3>
-              <span className="text-xs text-orange-600 font-medium hidden sm:inline">انقر على التنبيه لمعاينة ملف الطالب مباشرة</span>
+        {/* School Quranic Milestone Ribbon */}
+        <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-amber-50/60 rounded-3xl p-6 border border-emerald-200/60 shadow-sm">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+                <Medal size={24} />
+              </div>
+              <div>
+                <h4 className="font-black text-base text-gray-900">حصاد الإنجاز القرآني التراكمي بالمدرسة</h4>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  ثمار جهود الأساتذة والطلاب في حفظ ومراجعة القرآن الكريم منذ انطلاق الموسم
+                </p>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-1">
+            <div className="flex flex-wrap items-center gap-4 text-center">
+              <div className="bg-white/80 px-4 py-2 rounded-2xl border border-emerald-100 shadow-sm">
+                <p className="text-[10px] text-gray-500 font-bold">جلسات التسميع</p>
+                <p className="text-lg font-black text-emerald-800">{memorization.length}</p>
+              </div>
+              <div className="bg-white/80 px-4 py-2 rounded-2xl border border-emerald-100 shadow-sm">
+                <p className="text-[10px] text-gray-500 font-bold">الأحزاب المتقنة</p>
+                <p className="text-lg font-black text-emerald-800">{estimatedHizbsTotal} حزب</p>
+              </div>
+              <div className="bg-white/80 px-4 py-2 rounded-2xl border border-emerald-100 shadow-sm">
+                <p className="text-[10px] text-gray-500 font-bold">ما يعادل تقريباً</p>
+                <p className="text-lg font-black text-amber-600">{Math.max(Number(khatmahsEquiv), 1)} ختمة كاملة 🌿</p>
+              </div>
+              <div className="bg-white/80 px-4 py-2 rounded-2xl border border-emerald-100 shadow-sm">
+                <p className="text-[10px] text-gray-500 font-bold">امتحانات وسبر مجاز</p>
+                <p className="text-lg font-black text-blue-700">{examsPassedCount} سبر 📜</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Smart Notifications & Actionable Follow-Up */}
+        {smartNotifications.length > 0 ? (
+          <div className="bg-white rounded-3xl p-6 border border-orange-200/80 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-black flex items-center gap-2 text-orange-800">
+                <BellRing size={20} className="text-orange-600 animate-pulse" />
+                <span>تنبيهات المتابعة الذكية العاجلة ({smartNotifications.length})</span>
+              </h3>
+              <span className="text-xs text-orange-600 font-bold hidden sm:inline bg-orange-50 px-3 py-1 rounded-full">
+                💡 انقر على التنبيه لمعالجة ملف الطالب فوراً
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
               {smartNotifications.map(note => (
                 <div
                   key={note.id}
@@ -2007,50 +2133,66 @@ function App() {
                     if (note.student) setSelectedStudentForDetails(note.student);
                     else if (note.tabTarget) setActiveTab(note.tabTarget);
                   }}
-                  className="flex items-start gap-3 p-3 bg-white rounded-2xl border border-orange-100 hover:border-orange-300 hover:shadow-md transition-all cursor-pointer group"
+                  className="flex items-start gap-3 p-3.5 bg-gradient-to-l from-orange-50/30 to-white rounded-2xl border border-orange-100 hover:border-orange-300 hover:shadow-md transition-all cursor-pointer group"
                 >
-                  <div className={`p-2 rounded-xl flex-shrink-0 mt-0.5 ${note.priority === 'high' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
-                    {note.priority === 'high' ? <AlertTriangle size={16} /> : <Clock size={16} />}
+                  <div className={`p-2.5 rounded-2xl flex-shrink-0 mt-0.5 ${
+                    note.priority === 'high' 
+                      ? 'bg-red-100 text-red-700 shadow-sm shadow-red-200' 
+                      : 'bg-amber-100 text-amber-800 shadow-sm shadow-amber-200'
+                  }`}>
+                    {note.priority === 'high' ? <AlertTriangle size={17} /> : <Clock size={17} />}
                   </div>
                   <div className="flex-1">
-                    <p className={`text-xs font-bold ${note.priority === 'high' ? 'text-red-800' : 'text-gray-800'}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                        note.priority === 'high' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {note.badge || 'تنبيه'}
+                      </span>
+                      <span className="text-[11px] text-gray-400 group-hover:text-emerald-700 font-bold flex items-center gap-1 transition-colors">
+                        معالجة <ChevronLeft size={13} />
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-gray-800 leading-relaxed">
                       {note.message}
                     </p>
-                    <span className="text-[10px] text-gray-400 group-hover:text-emerald-700 transition flex items-center gap-1 mt-1 font-semibold">
-                      معاينة التفاصيل <ChevronLeft size={12} />
-                    </span>
                   </div>
                 </div>
               ))}
             </div>
           </div>
         ) : (
-          <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-3xl p-4 flex items-center gap-3 text-emerald-800 text-xs font-bold">
-            <div className="p-2 bg-emerald-100 rounded-xl text-emerald-700">
-              <CheckCircle size={18} />
+          <div className="bg-emerald-50/70 border border-emerald-200 rounded-3xl p-5 flex items-center gap-3 text-emerald-900 text-xs font-bold shadow-sm">
+            <div className="p-2.5 bg-emerald-600 text-white rounded-2xl shadow-sm">
+              <CheckCircle size={20} />
             </div>
-            <span>ما شاء الله! جميع الطلاب منتظمون في الحضور والتسميع والمراجعات، ولا توجد أي تنبيهات متأخرة اليوم.</span>
+            <div>
+              <p className="font-black text-sm text-emerald-950">كل الحلقات تسير بانتظام تام!</p>
+              <p className="text-emerald-700 font-medium mt-0.5">
+                ما شاء الله، لا توجد أي تنبيهات أو تأخيرات في التسميع أو الامتحانات اليوم.
+              </p>
+            </div>
           </div>
         )}
 
-        {/* Charts & Analytics Section */}
+        {/* Visual Charts: Attendance Pulse & Memorization Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Custom Modern Bar Chart for Attendance */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+          <div className="bg-white p-6 md:p-7 rounded-[2rem] border border-gray-100 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="text-base font-black flex items-center gap-2 text-gray-800">
                 <CalendarCheck size={18} className="text-emerald-600" />
-                <span>إحصائيات الحضور (آخر 7 أيام)</span>
+                <span>مؤشر الحضور الأسبوعي (آخر 7 أيام)</span>
               </h3>
-              <div className="flex items-center gap-3 text-[11px] font-bold">
-                <span className="flex items-center gap-1 text-emerald-700">
-                  <span className="w-2.5 h-2.5 bg-emerald-600 rounded-full inline-block" /> حاضر
+              <div className="flex items-center gap-2 text-[11px] font-bold">
+                <span className="flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                  <span className="w-2 h-2 bg-emerald-600 rounded-full inline-block" /> حاضر
                 </span>
-                <span className="flex items-center gap-1 text-orange-600">
-                  <span className="w-2.5 h-2.5 bg-orange-400 rounded-full inline-block" /> متأخر
+                <span className="flex items-center gap-1 text-orange-700 bg-orange-50 px-2 py-0.5 rounded-md">
+                  <span className="w-2 h-2 bg-orange-400 rounded-full inline-block" /> متأخر
                 </span>
-                <span className="flex items-center gap-1 text-rose-600">
-                  <span className="w-2.5 h-2.5 bg-rose-400 rounded-full inline-block" /> غائب
+                <span className="flex items-center gap-1 text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">
+                  <span className="w-2 h-2 bg-rose-400 rounded-full inline-block" /> غائب
                 </span>
               </div>
             </div>
@@ -2064,12 +2206,12 @@ function App() {
 
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
-                    {/* Tooltip */}
-                    <div className="absolute -top-12 bg-gray-900 text-white text-[10px] py-1.5 px-2.5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none whitespace-nowrap shadow-xl">
+                    {/* Floating Tooltip on Hover */}
+                    <div className="absolute -top-12 bg-gray-900 text-white text-[10px] py-1.5 px-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none whitespace-nowrap shadow-xl">
                       {d.dateStr}: حاضر {d.present} | متأخر {d.late} | غائب {d.absent}
                     </div>
 
-                    <div className="w-full max-w-[2.2rem] h-32 bg-gray-50 rounded-2xl flex flex-col justify-end overflow-hidden border border-gray-100 group-hover:border-emerald-300 transition-all">
+                    <div className="w-full max-w-[2.4rem] h-32 bg-gray-50 rounded-2xl flex flex-col justify-end overflow-hidden border border-gray-100 group-hover:border-emerald-400 transition-all shadow-inner">
                       <div style={{ height: `${absentHeight}%` }} className="bg-rose-400 w-full transition-all duration-500" />
                       <div style={{ height: `${excusedHeight}%` }} className="bg-purple-400 w-full transition-all duration-500" />
                       <div style={{ height: `${lateHeight}%` }} className="bg-orange-400 w-full transition-all duration-500" />
@@ -2083,14 +2225,14 @@ function App() {
           </div>
 
           {/* Memorization Activity Chart */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+          <div className="bg-white p-6 md:p-7 rounded-[2rem] border border-gray-100 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="text-base font-black flex items-center gap-2 text-gray-800">
                 <TrendingUp size={18} className="text-amber-500" />
-                <span>نشاط التسميع اليومي (آخر 7 أيام)</span>
+                <span>كثافة التسميع اليومي (آخر 7 أيام)</span>
               </h3>
-              <span className="text-xs text-amber-600 font-bold bg-amber-50 px-2.5 py-1 rounded-xl">
-                إجمالي الأسبوع: {memoData.reduce((acc, m) => acc + m.count, 0)} تسميع
+              <span className="text-xs text-amber-700 font-bold bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+                مجموع الأسبوع: {memoData.reduce((acc, m) => acc + m.count, 0)} تسميع
               </span>
             </div>
 
@@ -2102,10 +2244,10 @@ function App() {
                     <div className="absolute -top-10 bg-gray-900 text-white text-[10px] py-1.5 px-2.5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none whitespace-nowrap shadow-xl">
                       {d.count} جلسة تسميع
                     </div>
-                    <div className="w-full max-w-[2.2rem] h-32 bg-amber-50/50 rounded-2xl flex flex-col justify-end overflow-hidden border border-amber-100 group-hover:border-amber-400 transition-all">
+                    <div className="w-full max-w-[2.4rem] h-32 bg-amber-50/40 rounded-2xl flex flex-col justify-end overflow-hidden border border-amber-100 group-hover:border-amber-400 transition-all shadow-inner">
                       <div 
                         style={{ height: `${Math.max(height, 6)}%` }} 
-                        className="bg-gradient-to-t from-amber-500 to-amber-300 rounded-t-xl w-full transition-all duration-500" 
+                        className="bg-gradient-to-t from-amber-500 via-amber-400 to-yellow-300 rounded-t-xl w-full transition-all duration-500" 
                       />
                     </div>
                     <span className="text-[11px] font-bold text-gray-600 truncate w-full text-center">{d.dayLabel}</span>
@@ -2116,113 +2258,129 @@ function App() {
           </div>
         </div>
 
-        {/* Recent Memorization Feed */}
-        <div className="w-full">
-          {/* Recent Memorization Feed */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-black flex items-center gap-2 text-gray-800">
-                <History size={18} className="text-emerald-600" />
-                <span>آخر نشاطات التسميع المسجلة</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setActiveTab('memorization')}
-                className="text-xs text-emerald-700 hover:underline font-bold"
-              >
-                عرض الكل ←
-              </button>
+        {/* Live Stream: Recent Memorization Activities (Full-Width Clean Table Card) */}
+        <div className="bg-white p-6 md:p-7 rounded-[2rem] border border-gray-100 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b pb-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
+                <History size={18} />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-gray-900">سجل التسميعات الأخيرة المسجلة</h3>
+                <p className="text-xs text-gray-400">متابعة فورية للنشاطات القرآنية المسجلة من قبل الأساتذة</p>
+              </div>
             </div>
 
-            <div className="space-y-3">
-              {memorization.slice(0, 5).map((memo) => {
-                const st = students.find(s => s.id === memo.studentId);
-                return (
-                  <div 
-                    key={memo.id} 
-                    onClick={() => st && setSelectedStudentForDetails(st)}
-                    className="flex items-center justify-between p-3.5 bg-gray-50/70 hover:bg-emerald-50/40 rounded-2xl border border-gray-100 hover:border-emerald-200 transition-all cursor-pointer group"
-                  >
-                    <div>
-                      <span className="font-bold text-sm text-gray-900 group-hover:text-emerald-700 transition block">
-                        {st?.name || 'طالب محذوف'}
-                      </span>
-                      <span className="text-xs text-gray-500 mt-0.5 block">
-                        {memo.memoType === 'hizb' || memo.hizb ? getHizbDisplayString(memo) : `سورة ${memo.surah}`}
-                        {memo.fromAyah && ` (الآيات ${memo.fromAyah} - ${memo.toAyah})`}
-                      </span>
+            <button
+              type="button"
+              onClick={() => setActiveTab('memorization')}
+              className="text-xs text-emerald-700 hover:text-emerald-800 font-bold bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1"
+            >
+              <span>فتح وحدة التسميع</span>
+              <ChevronLeft size={14} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {memorization.slice(0, 6).map((memo) => {
+              const st = students.find(s => s.id === memo.studentId);
+              return (
+                <div 
+                  key={memo.id} 
+                  onClick={() => st && setSelectedStudentForDetails(st)}
+                  className="p-4 bg-gray-50/70 hover:bg-emerald-50/50 rounded-2xl border border-gray-100 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-sm shadow-sm group-hover:scale-105 transition-transform">
+                        {st?.name ? st.name.charAt(0) : 'ط'}
+                      </div>
+                      <div>
+                        <span className="font-bold text-sm text-gray-900 group-hover:text-emerald-700 transition block">
+                          {st?.name || 'طالب محذوف'}
+                        </span>
+                        <span className="text-[11px] text-gray-400 font-mono">
+                          #{st?.code || '--'} • {st?.branch || '--'}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="text-left flex flex-col items-end gap-1">
-                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold shadow-sm ${
-                        memo.status === 'good' ? 'bg-emerald-100 text-emerald-800' :
-                        memo.status === 'review' ? 'bg-amber-100 text-amber-800' :
-                        memo.status === 'performance' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {memo.status === 'good' ? 'متقن ✅' : memo.status === 'review' ? 'يحتاج ترسيخ ⚠️' : memo.status === 'performance' ? 'الأداء' : 'غير متقن'}
-                      </span>
-                      <span className="text-[10px] text-gray-400 font-mono">
-                        {memo.date ? format(new Date(memo.date), 'HH:mm', { locale: ar }) : '--'}
-                      </span>
-                    </div>
+                    <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold shadow-sm whitespace-nowrap ${
+                      memo.status === 'good' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                      memo.status === 'review' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                      memo.status === 'performance' ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-rose-100 text-rose-800 border border-rose-200'
+                    }`}>
+                      {memo.status === 'good' ? 'متقن ⭐' : memo.status === 'review' ? 'يحتاج ترسيخ ⚠️' : memo.status === 'performance' ? 'الأداء 📖' : 'غير متقن'}
+                    </span>
                   </div>
-                );
-              })}
 
-              {memorization.length === 0 && (
-                <div className="text-center py-12 text-gray-400">
-                  <BookOpen size={36} className="mx-auto mb-2 opacity-30" />
-                  <p className="text-sm font-bold">لا يوجد نشاط تسميع مسجل اليوم بعد</p>
+                  <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-xs">
+                    <span className="font-bold text-emerald-900 flex items-center gap-1">
+                      <BookOpen size={13} className="text-emerald-600" />
+                      {memo.memoType === 'hizb' || memo.hizb ? getHizbDisplayString(memo) : `سورة ${memo.surah}`}
+                      {memo.fromAyah && <span className="font-normal text-[11px] text-gray-500">(${memo.fromAyah}-${memo.toAyah})</span>}
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-mono">
+                      {memo.date ? format(new Date(memo.date), 'HH:mm', { locale: ar }) : '--'}
+                    </span>
+                  </div>
                 </div>
-              )}
-            </div>
+              );
+            })}
+
+            {memorization.length === 0 && (
+              <div className="col-span-full text-center py-12 text-gray-400">
+                <BookOpen size={40} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm font-bold">لا يوجد نشاط تسميع مسجل اليوم بعد</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Quick Access Tiles to Modules */}
+        {/* Quick Launchpad to Core Modules */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
           <div 
             onClick={() => setActiveTab('students')}
-            className="p-4 bg-white rounded-2xl border border-gray-100 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer text-center group"
+            className="p-5 bg-white rounded-3xl border border-gray-100 hover:border-emerald-400 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer text-center group"
           >
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-              <Users size={22} />
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 shadow-inner group-hover:scale-110 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+              <Users size={24} />
             </div>
-            <h4 className="font-bold text-xs text-gray-800">إدارة الطلاب</h4>
-            <p className="text-[10px] text-gray-400 mt-0.5">البطاقات والمستويات</p>
+            <h4 className="font-black text-sm text-gray-900">إدارة شؤون الطلاب</h4>
+            <p className="text-xs text-gray-400 mt-1">البطاقات، المستويات، والترقية</p>
           </div>
 
           <div 
             onClick={() => setActiveTab('exams')}
-            className="p-4 bg-white rounded-2xl border border-gray-100 hover:border-purple-300 hover:shadow-md transition-all cursor-pointer text-center group"
+            className="p-5 bg-white rounded-3xl border border-gray-100 hover:border-purple-400 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer text-center group"
           >
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-              <GraduationCap size={22} />
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center mb-3 shadow-inner group-hover:scale-110 group-hover:bg-purple-600 group-hover:text-white transition-all">
+              <GraduationCap size={24} />
             </div>
-            <h4 className="font-bold text-xs text-gray-800">بوابة الامتحانات</h4>
-            <p className="text-[10px] text-gray-400 mt-0.5">السبر والتأهيل</p>
+            <h4 className="font-black text-sm text-gray-900">بوابة الامتحانات (السبر)</h4>
+            <p className="text-xs text-gray-400 mt-1">سجل الامتحانات والتأهيل للإجازة</p>
           </div>
 
           <div 
             onClick={() => setActiveTab('review')}
-            className="p-4 bg-white rounded-2xl border border-gray-100 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer text-center group"
+            className="p-5 bg-white rounded-3xl border border-gray-100 hover:border-amber-400 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer text-center group"
           >
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-              <RefreshCw size={22} />
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center mb-3 shadow-inner group-hover:scale-110 group-hover:bg-amber-600 group-hover:text-white transition-all">
+              <RefreshCw size={24} />
             </div>
-            <h4 className="font-bold text-xs text-gray-800">خطة المراجعة</h4>
-            <p className="text-[10px] text-gray-400 mt-0.5">التثبيت والمتابعة</p>
+            <h4 className="font-black text-sm text-gray-900">خطة المراجعة والتثبيت</h4>
+            <p className="text-xs text-gray-400 mt-1">تعيين ومتابعة مراجعات السور</p>
           </div>
 
           <div 
             onClick={() => setActiveTab('subscriptions')}
-            className="p-4 bg-white rounded-2xl border border-gray-100 hover:border-teal-300 hover:shadow-md transition-all cursor-pointer text-center group"
+            className="p-5 bg-white rounded-3xl border border-gray-100 hover:border-teal-400 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer text-center group"
           >
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-              <CreditCard size={22} />
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center mb-3 shadow-inner group-hover:scale-110 group-hover:bg-teal-600 group-hover:text-white transition-all">
+              <CreditCard size={24} />
             </div>
-            <h4 className="font-bold text-xs text-gray-800">الاشتراكات والرسوم</h4>
-            <p className="text-[10px] text-gray-400 mt-0.5">الوصولات والتحصيل</p>
+            <h4 className="font-black text-sm text-gray-900">الاشتراكات السنوية</h4>
+            <p className="text-xs text-gray-400 mt-1">المداخيل، الوصولات، والتقارير</p>
           </div>
         </div>
       </div>
