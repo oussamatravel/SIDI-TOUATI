@@ -44,6 +44,9 @@ import {
   ShieldCheck,
   Trophy,
   School,
+  UserX,
+  UserMinus,
+  RotateCcw,
   X
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
@@ -81,6 +84,11 @@ function App() {
   const [unauthParentCode, setUnauthParentCode] = useState(null);
   const [rawStudents, setRawStudents] = useState([]);
   const [students, setStudents] = useState([]);
+  const [abandonedStudents, setAbandonedStudents] = useState([]);
+  const [studentStatusTab, setStudentStatusTab] = useState('active'); // 'active' | 'abandoned'
+  const [abandoningStudent, setAbandoningStudent] = useState(null);
+  const [abandonReason, setAbandonReason] = useState('غياب متواصل وانقطاع تام عن الحلقات');
+  const [abandonCustomReason, setAbandonCustomReason] = useState('');
   const [teachers, setTeachers] = useState([]);
   const [rawTeachers, setRawTeachers] = useState([]);
   const [adminBranchFilter, setAdminBranchFilter] = useState('All');
@@ -367,10 +375,13 @@ function App() {
         currentStudents = currentStudents.filter(s => s.teacherId === adminTeacherFilter);
       }
 
-      setStudents(currentStudents);
+      const activeStudents = currentStudents.filter(s => !s.abandoned);
+      const abStudents = currentStudents.filter(s => !!s.abandoned);
+      setStudents(activeStudents);
+      setAbandonedStudents(abStudents);
 
       if (adminBranchFilter !== 'All' || adminTeacherFilter !== 'All') {
-        const branchStudentIds = currentStudents.map(s => s.id);
+        const branchStudentIds = activeStudents.map(s => s.id);
         setAttendance(rawAttendance.filter(a => branchStudentIds.includes(a.studentId)));
         setMemorization([...rawMemorization.filter(m => branchStudentIds.includes(m.studentId))].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
         setReviews([...rawReviews.filter(r => branchStudentIds.includes(r.studentId))].sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0)));
@@ -390,8 +401,11 @@ function App() {
           currentStudents = currentStudents.filter(s => s.teacherId === user.uid);
         }
       }
-      setStudents(currentStudents); // Update the state with the filtered list
-      const myStudentIds = currentStudents.map(s => s.id);
+      const activeStudents = currentStudents.filter(s => !s.abandoned);
+      const abStudents = currentStudents.filter(s => !!s.abandoned);
+      setStudents(activeStudents);
+      setAbandonedStudents(abStudents);
+      const myStudentIds = activeStudents.map(s => s.id);
       
       const filteredAtt = rawAttendance.filter(a => a.teacherId === user.uid || myStudentIds.includes(a.studentId));
       setAttendance(filteredAtt);
@@ -995,9 +1009,70 @@ function App() {
     }
   };
 
-  const handleDeleteStudent = async (id) => {
-    if (window.confirm("هل أنت متأكد من حذف هذا الطالب؟")) {
-      await deleteDoc(doc(db, "students", id));
+  const handleOpenAbandonModal = (student) => {
+    setAbandoningStudent(student);
+    setAbandonReason('غياب متواصل وانقطاع تام عن الحلقات');
+    setAbandonCustomReason('');
+  };
+
+  const handleConfirmAbandon = async () => {
+    if (!abandoningStudent) return;
+    const finalReason = abandonReason === 'آخر' ? (abandonCustomReason.trim() || 'أسباب أخرى') : abandonReason;
+    try {
+      await updateDoc(doc(db, "students", abandoningStudent.id), {
+        abandoned: true,
+        abandonedAt: new Date().toISOString(),
+        abandonedBy: user?.name || user?.displayName || user?.email || (role === 'admin' ? 'الإدارة' : 'الأستاذ المعلم'),
+        abandonedReason: finalReason
+      });
+      const sName = abandoningStudent.name;
+      setAbandoningStudent(null);
+      alert(`تم تسجيل انقطاع الطالب (${sName}) بنجاح، وتحويل ملفه إلى الإدارة للبت في الحذف النهائي.`);
+    } catch (err) {
+      console.error("Error marking student abandoned:", err);
+      alert("حدث خطأ أثناء تسجيل الانقطاع، يرجى المحاولة ثانية.");
+    }
+  };
+
+  const handleRestoreStudent = async (studentId, studentName) => {
+    if (window.confirm(`هل أنت متأكد من إلغاء انقطاع الطالب (${studentName}) وإعادته إلى قائمة الطلاب المنتظمين؟`)) {
+      try {
+        await updateDoc(doc(db, "students", studentId), {
+          abandoned: false,
+          abandonedAt: null,
+          abandonedBy: null,
+          abandonedReason: null
+        });
+        alert(`تمت استعادة الطالب (${studentName}) بنجاح وإعادته للحلقات المنتظمة.`);
+      } catch (err) {
+        console.error("Error restoring student:", err);
+        alert("حدث خطأ أثناء استعادة الطالب.");
+      }
+    }
+  };
+
+  const handlePermanentDelete = async (studentId, studentName) => {
+    if (role !== 'admin') {
+      alert("عذراً، تأكيد الحذف النهائي من صلاحيات إدارة المدرسة فقط.");
+      return;
+    }
+    if (window.confirm(`تحذير نهائي: هل أنت متأكد تماماً من الحذف النهائي لملف الطالب (${studentName}) من قاعدة البيانات؟\nهذا الإجراء سيحذف بيانات الطالب نهائياً وبشكل لا يمكن التراجع عنه.`)) {
+      try {
+        await deleteDoc(doc(db, "students", studentId));
+        alert(`تم تأكيد الحذف النهائي للطالب (${studentName}) من قاعدة البيانات.`);
+      } catch (err) {
+        console.error("Error deleting student permanently:", err);
+        alert("حدث خطأ أثناء الحذف النهائي.");
+      }
+    }
+  };
+
+  const handleDeleteStudent = (studentOrId) => {
+    const student = typeof studentOrId === 'string' 
+      ? rawStudents.find(s => s.id === studentOrId) 
+      : studentOrId;
+    if (student) {
+      handleOpenAbandonModal(student);
     }
   };
 
@@ -1850,6 +1925,22 @@ function App() {
       });
     }
 
+    // Abandoned Students notification for Admin
+    const pendingAbandonsCount = rawStudents.filter(s => s.abandoned).length;
+    if (role === 'admin' && pendingAbandonsCount > 0) {
+      smartNotifications.push({
+        id: `admin-abandons`,
+        type: 'abandoned',
+        priority: 'high',
+        badge: `${pendingAbandonsCount} طلب حذف`,
+        actionHandler: () => {
+          setStudentStatusTab('abandoned');
+          setActiveTab('students');
+        },
+        message: `يوجد ${pendingAbandonsCount} طالب في قائمة المنقطعين بانتظار قرار الحذف النهائي من الإدارة.`
+      });
+    }
+
     smartNotifications.sort((a, b) => (a.priority === 'high' ? -1 : 1));
 
     return (
@@ -2320,7 +2411,8 @@ function App() {
                     <div
                       key={note.id}
                       onClick={() => {
-                        if (note.student) setSelectedStudentForDetails(note.student);
+                        if (note.actionHandler) note.actionHandler();
+                        else if (note.student) setSelectedStudentForDetails(note.student);
                         else if (note.tabTarget) setActiveTab(note.tabTarget);
                       }}
                       className="p-3 bg-gradient-to-l from-orange-50/40 to-white rounded-2xl border border-orange-100 hover:border-orange-300 hover:shadow-md transition-all cursor-pointer group space-y-1.5"
@@ -2438,6 +2530,56 @@ function App() {
   const renderStudents = () => (
     selectedStudentForDetails ? renderStudentDetails(selectedStudentForDetails) : (
       <div className="space-y-4">
+        {/* Top Header: Title & Segmented Status Toggle */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
+          <div>
+            <h3 className="text-xl font-black text-slate-800">إدارة قوائم الطلاب</h3>
+            <p className="text-xs text-slate-500 mt-0.5">متابعة الطلاب المسجلين بالحلقات، وملفات الانقطاع المحالة للإدارة</p>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl border border-slate-200 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setStudentStatusTab('active')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                studentStatusTab === 'active'
+                  ? 'bg-white text-emerald-800 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Users size={16} />
+              <span>الطلاب المنتظمون</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
+                studentStatusTab === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {students.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStudentStatusTab('abandoned')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                studentStatusTab === 'abandoned'
+                  ? 'bg-rose-600 text-white shadow-sm'
+                  : 'text-rose-700 hover:bg-rose-50'
+              }`}
+            >
+              <UserX size={16} />
+              <span>المنقطعون عن الدراسة</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
+                studentStatusTab === 'abandoned' 
+                  ? 'bg-white text-rose-700' 
+                  : abandonedStudents.length > 0 
+                    ? 'bg-rose-100 text-rose-700 animate-pulse' 
+                    : 'bg-slate-200 text-slate-600'
+              }`}>
+                {abandonedStudents.length}
+              </span>
+            </button>
+          </div>
+        </div>
+
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div className="flex flex-wrap w-full lg:w-auto gap-2">
             <div className="relative w-full sm:w-64">
@@ -2531,8 +2673,9 @@ function App() {
           </div>
         </div>
 
+        {/* Display student list based on active/abandoned tab */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {students
+          {(studentStatusTab === 'active' ? students : abandonedStudents)
             .filter(s => !(role === 'admin' || (role === 'supervisor' && supervisorViewMode === 'all_supervised')) || studentTabBranchFilter === 'All' || s.branch === studentTabBranchFilter)
             .filter(s => !(role === 'admin' || (role === 'supervisor' && supervisorViewMode === 'all_supervised')) || studentTabTeacherFilter === 'All' || s.teacherId === studentTabTeacherFilter)
             .filter(s => studentTabLevelFilter === 'All' || s.level === studentTabLevelFilter)
@@ -2541,88 +2684,167 @@ function App() {
               (s.code || '').includes(studentSearch)
             )
             .map(student => {
-            const prog = calculateStudentProgress(student.id);
-            return (
-              <div key={student.id} className="card hover:border-primary transition-colors group">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h4 className="font-bold text-lg">{student.name}</h4>
-                    <p className="text-sm text-gray-500">
-                      {student.birthDate
-                        ? `العمر: ${Math.floor((new Date() - new Date(student.birthDate)) / (365.25 * 24 * 60 * 60 * 1000))} سنة`
-                        : student.age ? `العمر: ${student.age} سنة` : ''}
-                      {student.level && ` - ${student.level}`}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <div className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
-                      {student.code}
+              if (studentStatusTab === 'abandoned') {
+                const assignedTeacher = rawTeachers.find(t => t.id === student.teacherId);
+                return (
+                  <div key={student.id} className="card border-2 border-rose-100 bg-rose-50/15 hover:border-rose-300 transition-all space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-bold text-lg text-slate-900">{student.name}</h4>
+                        <p className="text-sm text-slate-500">
+                          {student.level && `${student.level}`} • {student.branch}
+                        </p>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
+                        <UserX size={13} />
+                        منقطع عن الدراسة
+                      </span>
                     </div>
-                    <div className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                      {prog.totalPercentage}%
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="w-full bg-gray-100 h-1.5 rounded-full mb-4 overflow-hidden">
-                  <div className="bg-primary h-full" style={{ width: `${prog.totalPercentage}%` }} />
-                </div>
 
-                <div className="space-y-1 text-sm text-gray-600 mb-4">
-                  <p>ولي الأمر: {student.parentName}</p>
-                  {student.fatherPhone && <p className="text-xs">الأب: {student.fatherPhone}</p>}
-                  {student.motherPhone && <p className="text-xs">الأم: {student.motherPhone}</p>}
-                  {student.spousePhone && <p className="text-xs">زوج / زوجة: {student.spousePhone}</p>}
-                  {/* Fallback for old data */}
-                  {!student.fatherPhone && !student.motherPhone && student.phone && <p>الهاتف: {student.phone}</p>}
-                  <p className="text-xs text-primary font-medium">الأحزاب المحفوظة: {prog.totalHizbs}</p>
-                </div>
-                
-                <div className="flex flex-col gap-2 pt-4 border-t">
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => setSelectedStudentForDetails(student)}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 bg-primary/5 text-primary hover:bg-primary/10 rounded-lg transition-colors font-bold text-sm"
-                    >
-                      <BarChart2 size={16} />
-                      التقدم
-                    </button>
-                    <button 
-                      onClick={() => setShowPraiseCard(student)}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 bg-yellow-50 text-yellow-600 hover:bg-yellow-100 rounded-lg transition-colors font-bold text-sm"
-                    >
-                      <Star size={16} />
-                      استحسان
-                    </button>
+                    <div className="p-3.5 rounded-xl bg-white border border-rose-100 text-xs space-y-1.5 text-slate-600">
+                      <p><span className="font-bold text-slate-700">المعلم المشرف:</span> {assignedTeacher?.name || 'غير محدد'}</p>
+                      <p><span className="font-bold text-slate-700">سبب الانقطاع:</span> <span className="text-rose-700 font-semibold">{student.abandonedReason || 'غياب متواصل وانقطاع تام'}</span></p>
+                      <p><span className="font-bold text-slate-700">تاريخ التسجيل:</span> {student.abandonedAt ? format(new Date(student.abandonedAt), 'yyyy-MM-dd HH:mm') : 'غير محدد'}</p>
+                      {student.abandonedBy && (
+                        <p><span className="font-bold text-slate-700">المبلّغ:</span> {student.abandonedBy}</p>
+                      )}
+                      {student.parentName && <p><span className="font-bold text-slate-700">ولي الأمر:</span> {student.parentName}</p>}
+                      {(student.fatherPhone || student.motherPhone || student.phone) && (
+                        <p><span className="font-bold text-slate-700">الهاتف:</span> {student.fatherPhone || student.motherPhone || student.phone}</p>
+                      )}
+                    </div>
+
+                    {role === 'admin' ? (
+                      <div className="flex gap-2 pt-2 border-t border-rose-100">
+                        <button 
+                          onClick={() => handlePermanentDelete(student.id, student.name)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl transition-colors text-xs font-bold shadow-sm"
+                        >
+                          <Trash2 size={14} />
+                          تأكيد الحذف النهائي
+                        </button>
+                        <button 
+                          onClick={() => handleRestoreStudent(student.id, student.name)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-colors text-xs font-bold shadow-sm"
+                        >
+                          <RotateCcw size={14} />
+                          استعادة الطالب
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2 pt-2 border-t border-rose-100">
+                        <div className="bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 text-center text-xs font-bold text-amber-800">
+                          ⏳ بانتظار قرار الإدارة لتأكيد الحذف النهائي
+                        </div>
+                        <button 
+                          onClick={() => handleRestoreStudent(student.id, student.name)}
+                          className="w-full flex items-center justify-center gap-1.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-xs font-bold"
+                        >
+                          <RotateCcw size={14} />
+                          تراجع وإلغاء الانقطاع
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => {
-                        setEditingStudent(student);
-                        setNewStudent(student);
-                        setIsModalOpen(true);
-                      }}
-                      className="flex-1 flex items-center justify-center gap-1 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-xs"
-                    >
-                      <Edit2 size={14} />
-                      تعديل
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteStudent(student.id)}
-                      className="flex-1 flex items-center justify-center gap-1 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs"
-                    >
-                      <Trash2 size={14} />
-                      حذف
-                    </button>
+                );
+              }
+
+              // Active Student Card
+              const prog = calculateStudentProgress(student.id);
+              return (
+                <div key={student.id} className="card hover:border-primary transition-colors group">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 className="font-bold text-lg">{student.name}</h4>
+                      <p className="text-sm text-gray-500">
+                        {student.birthDate
+                          ? `العمر: ${Math.floor((new Date() - new Date(student.birthDate)) / (365.25 * 24 * 60 * 60 * 1000))} سنة`
+                          : student.age ? `العمر: ${student.age} سنة` : ''}
+                        {student.level && ` - ${student.level}`}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
+                        {student.code}
+                      </div>
+                      <div className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                        {prog.totalPercentage}%
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="w-full bg-gray-100 h-1.5 rounded-full mb-4 overflow-hidden">
+                    <div className="bg-primary h-full" style={{ width: `${prog.totalPercentage}%` }} />
+                  </div>
+
+                  <div className="space-y-1 text-sm text-gray-600 mb-4">
+                    <p>ولي الأمر: {student.parentName}</p>
+                    {student.fatherPhone && <p className="text-xs">الأب: {student.fatherPhone}</p>}
+                    {student.motherPhone && <p className="text-xs">الأم: {student.motherPhone}</p>}
+                    {student.spousePhone && <p className="text-xs">زوج / زوجة: {student.spousePhone}</p>}
+                    {/* Fallback for old data */}
+                    {!student.fatherPhone && !student.motherPhone && student.phone && <p>الهاتف: {student.phone}</p>}
+                    <p className="text-xs text-primary font-medium">الأحزاب المحفوظة: {prog.totalHizbs}</p>
+                  </div>
+                  
+                  <div className="flex flex-col gap-2 pt-4 border-t">
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => setSelectedStudentForDetails(student)}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 bg-primary/5 text-primary hover:bg-primary/10 rounded-lg transition-colors font-bold text-sm"
+                      >
+                        <BarChart2 size={16} />
+                        التقدم
+                      </button>
+                      <button 
+                        onClick={() => setShowPraiseCard(student)}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 bg-yellow-50 text-yellow-600 hover:bg-yellow-100 rounded-lg transition-colors font-bold text-sm"
+                      >
+                        <Star size={16} />
+                        استحسان
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => {
+                          setEditingStudent(student);
+                          setNewStudent(student);
+                          setIsModalOpen(true);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-xs"
+                      >
+                        <Edit2 size={14} />
+                        تعديل
+                      </button>
+                      <button 
+                        onClick={() => handleOpenAbandonModal(student)}
+                        className="flex-1 flex items-center justify-center gap-1 py-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-xs font-bold"
+                        title={role === 'admin' ? 'حذف أو تسجيل انقطاع' : 'تسجيل انقطاع الطالب وإحالته للإدارة'}
+                      >
+                        <UserMinus size={14} />
+                        {role === 'admin' ? 'حذف / انقطاع' : 'تسجيل انقطاع'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-          {students.length === 0 && (
-            <div className="col-span-full py-20 text-center text-gray-400 border-2 border-dashed rounded-xl">
-               <Users size={48} className="mx-auto mb-4 opacity-20" />
-               <p>لا يوجد طلاب حالياً</p>
+              );
+            })}
+          {((studentStatusTab === 'active' ? students : abandonedStudents).length === 0) && (
+            <div className={`col-span-full py-16 text-center border-2 border-dashed rounded-2xl ${
+              studentStatusTab === 'abandoned' ? 'border-rose-200 bg-rose-50/20 text-rose-800' : 'text-gray-400'
+            }`}>
+               {studentStatusTab === 'abandoned' ? (
+                 <>
+                   <UserX size={44} className="mx-auto mb-3 text-slate-300 opacity-60" />
+                   <p className="font-bold text-slate-700">لا يوجد طلاب منقطعون حالياً</p>
+                   <p className="text-xs text-slate-400 mt-1">جميع طلاب المدرسة منتظمون في الحلقات ولا توجد طلبات حذف معلقة.</p>
+                 </>
+               ) : (
+                 <>
+                   <Users size={48} className="mx-auto mb-4 opacity-20" />
+                   <p>لا يوجد طلاب منتظمون حالياً</p>
+                 </>
+               )}
             </div>
           )}
         </div>
@@ -2762,6 +2984,121 @@ function App() {
                   {editingStudent ? 'حفظ التعديلات' : 'إضافة الطالب'}
                 </button>
               </form>
+            </div>
+          </div>
+        )}
+
+        {abandoningStudent && (
+          <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-rose-100">
+              {/* Header */}
+              <div className="p-6 bg-gradient-to-r from-rose-700 via-rose-600 to-amber-700 text-white flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-white/20 rounded-2xl">
+                    <UserX size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold">تسجيل انقطاع طالب</h3>
+                    <p className="text-xs text-rose-100 mt-0.5">إحالة الملف إلى الإدارة للبت في الحذف النهائي</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setAbandoningStudent(null)} 
+                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5">
+                {/* Student Snapshot */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-base">{abandoningStudent.name}</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {abandoningStudent.branch} • {abandoningStudent.level}
+                    </p>
+                  </div>
+                  <span className="px-3 py-1 bg-rose-50 text-rose-700 rounded-xl text-xs font-bold border border-rose-200">
+                    طالب مسجل
+                  </span>
+                </div>
+
+                {/* Reason selector */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-700">سبب الانقطاع / طلب الحذف:</label>
+                  <select 
+                    value={abandonReason}
+                    onChange={(e) => setAbandonReason(e.target.value)}
+                    className="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm font-medium focus:ring-2 focus:ring-rose-500 outline-none"
+                  >
+                    <option value="غياب متواصل وانقطاع تام عن الحلقات">غياب متواصل وانقطاع تام عن الحلقات</option>
+                    <option value="تغيير مقر السكن أو الانتقال لمدينة أخرى">تغيير مقر السكن أو الانتقال لمدينة أخرى</option>
+                    <option value="الانتقال لمدرسة قرآنية أخرى">الانتقال لمدرسة قرآنية أخرى</option>
+                    <option value="ظروف صحية أو عائلية خاصة">ظروف صحية أو عائلية خاصة</option>
+                    <option value="الالتحاق بالدراسة النظامية أو العمل">الالتحاق بالدراسة النظامية أو العمل</option>
+                    <option value="آخر">سبب مخصص (كتابة سبب آخر)...</option>
+                  </select>
+                </div>
+
+                {abandonReason === 'آخر' && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">توضيح السبب:</label>
+                    <input 
+                      type="text"
+                      required
+                      value={abandonCustomReason}
+                      onChange={(e) => setAbandonCustomReason(e.target.value)}
+                      placeholder="اكتب سبب الانقطاع بالتفصيل..."
+                      className="w-full px-4 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-rose-500"
+                    />
+                  </div>
+                )}
+
+                <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 flex items-start gap-2.5 text-xs text-amber-900">
+                  <AlertTriangle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">
+                    <strong>تنبيه:</strong> سيتم نقل هذا الطالب إلى قائمة <strong>«المنقطعون عن الدراسة»</strong> وإخفاؤه من قوائم الحضور والتسميع اليومية. لن يُحذف ملف الطالب نهائياً إلا بعد تأكيد الإدارة.
+                  </p>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                  <button 
+                    type="button"
+                    onClick={handleConfirmAbandon}
+                    className="flex-1 py-3 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 text-white font-bold rounded-xl text-xs sm:text-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <UserX size={16} />
+                    <span>تأكيد تسجيل الانقطاع وإحالته للإدارة</span>
+                  </button>
+
+                  {role === 'admin' && (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const sId = abandoningStudent.id;
+                        const sName = abandoningStudent.name;
+                        setAbandoningStudent(null);
+                        handlePermanentDelete(sId, sName);
+                      }}
+                      className="py-3 px-3 bg-slate-900 hover:bg-black text-rose-400 hover:text-rose-300 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+                      title="حذف نهائي فوري من قاعدة البيانات"
+                    >
+                      <Trash2 size={15} />
+                      <span>حذف فوري (الإدارة)</span>
+                    </button>
+                  )}
+
+                  <button 
+                    type="button"
+                    onClick={() => setAbandoningStudent(null)}
+                    className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -4224,12 +4561,16 @@ function App() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
              <div className="bg-white/10 p-4 rounded-xl">
-                <p className="text-xs opacity-60">إجمالي الطلاب</p>
+                <p className="text-xs opacity-60">إجمالي الطلاب المنتظمين</p>
                 <p className="text-xl font-bold">{students.length}</p>
              </div>
              <div className="bg-white/10 p-4 rounded-xl">
                 <p className="text-xs opacity-60">إجمالي المعلمين</p>
                 <p className="text-xl font-bold">{teachers.length}</p>
+             </div>
+             <div className="bg-rose-500/20 border border-rose-500/30 p-4 rounded-xl">
+                <p className="text-xs text-rose-300">المرشحون المنقطعون عن الدراسة</p>
+                <p className="text-xl font-bold text-rose-400">{rawStudents.filter(s => s.abandoned).length} طالب</p>
              </div>
           </div>
           <div className="mt-6 flex flex-wrap gap-4 justify-end">
@@ -4248,6 +4589,83 @@ function App() {
                 تحميل نسخة احتياطية (JSON)
              </button>
           </div>
+       </div>
+
+       {/* Case: Abandoned Candidates Pending Final Deletion Confirmation */}
+       <div className="card bg-white p-6 rounded-3xl border-2 border-rose-100 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-rose-100 pb-4">
+             <div className="flex items-center gap-3">
+                <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl">
+                   <UserX size={24} />
+                </div>
+                <div>
+                   <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-bold text-slate-900">صندوق المرشحين المنقطعين عن الدراسة (طلبات الحذف النهائي)</h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white">
+                         {rawStudents.filter(s => s.abandoned).length} طلب
+                      </span>
+                   </div>
+                   <p className="text-xs text-slate-500 mt-0.5">
+                      مراجعة ملفات الطلاب المنقطعين عن الحلقات، مع الصلاحية الإدارية لتأكيد الحذف النهائي أو إلغاء الانقطاع وإعادتهم للحلقات.
+                   </p>
+                </div>
+             </div>
+          </div>
+
+          {rawStudents.filter(s => s.abandoned).length > 0 ? (
+             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pt-2">
+                {rawStudents.filter(s => s.abandoned).map(student => {
+                   const t = rawTeachers.find(teacher => teacher.id === student.teacherId);
+                   return (
+                      <div key={student.id} className="p-4 rounded-2xl border-2 border-rose-100 bg-rose-50/20 hover:border-rose-300 transition-all space-y-3">
+                         <div className="flex justify-between items-start">
+                            <div>
+                               <h4 className="font-bold text-base text-slate-900">{student.name}</h4>
+                               <p className="text-xs text-slate-500 mt-0.5">
+                                  {student.branch} • {student.level}
+                               </p>
+                            </div>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                               طلب حذف
+                            </span>
+                         </div>
+
+                         <div className="p-3 rounded-xl bg-white border border-rose-100 text-xs space-y-1 text-slate-600">
+                            <p><span className="font-bold text-slate-700">المعلم المشرف:</span> {t?.name || 'غير محدد'}</p>
+                            <p><span className="font-bold text-slate-700">سبب الانقطاع:</span> <span className="text-rose-700 font-semibold">{student.abandonedReason || 'غياب متواصل وانقطاع تام'}</span></p>
+                            <p><span className="font-bold text-slate-700">تاريخ التسجيل:</span> {student.abandonedAt ? format(new Date(student.abandonedAt), 'yyyy-MM-dd HH:mm') : 'غير محدد'}</p>
+                            {student.abandonedBy && (
+                               <p><span className="font-bold text-slate-700">المبلّغ:</span> {student.abandonedBy}</p>
+                            )}
+                         </div>
+
+                         <div className="flex gap-2 pt-1">
+                            <button
+                               onClick={() => handlePermanentDelete(student.id, student.name)}
+                               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
+                            >
+                               <Trash2 size={14} />
+                               تأكيد الحذف النهائي
+                            </button>
+                            <button
+                               onClick={() => handleRestoreStudent(student.id, student.name)}
+                               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
+                            >
+                               <RotateCcw size={14} />
+                               استعادة الطالب
+                            </button>
+                         </div>
+                      </div>
+                   );
+                })}
+             </div>
+          ) : (
+             <div className="py-12 text-center text-slate-400 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                <CheckCircle size={36} className="mx-auto text-emerald-500 mb-2 opacity-80" />
+                <p className="font-bold text-slate-700 text-sm">صندوق المنقطعين فارغ</p>
+                <p className="text-xs text-slate-400 mt-1">لا توجد أي طلبات حذف أو حالات انقطاع معلقة لدى الإدارة.</p>
+             </div>
+          )}
        </div>
 
        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
