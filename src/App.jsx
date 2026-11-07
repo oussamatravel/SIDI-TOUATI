@@ -47,6 +47,8 @@ import {
   UserX,
   UserMinus,
   RotateCcw,
+  Moon,
+  Sun,
   X
 } from 'lucide-react';
 import { QURAN_DATA, TOTAL_AYAH_COUNT, TOTAL_HIZB_COUNT, getHizbAyahCount, getHizbAyahList, HIZB_STARTS, HIZB_LABELS } from './constants/quranData';
@@ -80,6 +82,23 @@ export const STUDENT_LEVELS = ['ما قبل التمدرس', 'ابتدائي', '
 function App() {
   const { user, role, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('theme_mode');
+    return saved !== 'light'; // Default to true (Dark Mode enabled)
+  });
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
+      localStorage.setItem('theme_mode', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
+      localStorage.setItem('theme_mode', 'light');
+    }
+  }, [darkMode]);
+
   const [installPrompt, setInstallPrompt] = useState(null);
   const [unauthParentCode, setUnauthParentCode] = useState(null);
   const [rawStudents, setRawStudents] = useState([]);
@@ -5176,19 +5195,21 @@ function App() {
     }
   };
   return (
-    <div className="flex flex-col lg:flex-row min-h-screen">
+    <div className={`flex flex-col lg:flex-row min-h-screen transition-colors duration-300 ${darkMode ? 'dark bg-[#0b1116] text-slate-100' : 'bg-[#f5f5f5] text-slate-900'}`}>
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         unreadMessagesCount={unreadMessagesCount} 
         installPrompt={installPrompt}
         onInstallClick={handleInstallClick}
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
       />
       
-      <main className="flex-1 p-4 lg:p-8 overflow-hidden">
-        <header className="mb-8 flex justify-between items-center lg:items-start">
+      <main className={`flex-1 p-4 lg:p-8 overflow-hidden transition-colors duration-300 ${darkMode ? 'bg-[#0b1116]' : 'bg-[#f5f5f5]'}`}>
+        <header className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-800">
+            <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
               {activeTab === 'dashboard' && 'لوحة التحكم'}
               {activeTab === 'students' && 'إدارة الطلاب'}
               {activeTab === 'attendance' && 'سجل الحضور'}
@@ -5200,21 +5221,39 @@ function App() {
               {activeTab === 'parents' && 'بوابة الوالدين'}
               {activeTab === 'admin' && 'لوحة الإدارة'}
             </h2>
-            <p className="text-gray-500 text-sm">
+            <p className={`${darkMode ? 'text-slate-400' : 'text-gray-500'} text-sm`}>
               أهلاً بك {user?.name || (role === 'admin' ? 'أيها المسؤول' : 'يا معلم')}
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            {/* Quick Dark Mode / Night Mode Toggle */}
             <button 
-              onClick={logout}
-              className="flex items-center gap-2 text-red-500 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors text-sm"
+              type="button"
+              onClick={() => setDarkMode(!darkMode)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border ${
+                darkMode 
+                  ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-500/30' 
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+              }`}
+              title={darkMode ? "التبديل إلى الوضع النهاري" : "التبديل إلى الوضع الداكن (مريح للعين)"}
             >
-              <LogOut size={18} />
-              خروج
+              {darkMode ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-slate-600" />}
+              <span>{darkMode ? 'الوضع الداكن (مفعّل)' : 'الوضع الداكن'}</span>
             </button>
-            <div className="bg-white px-4 py-2 rounded-lg shadow-sm border text-sm font-medium">
+
+            <div className={`px-4 py-2 rounded-xl shadow-sm border text-xs sm:text-sm font-medium ${
+              darkMode ? 'bg-slate-800 text-slate-200 border-slate-700' : 'bg-white text-slate-700 border-slate-100'
+            }`}>
               {format(new Date(), 'EEEE, dd MMMM yyyy', { locale: ar })}
             </div>
+
+            <button 
+              onClick={logout}
+              className="flex items-center gap-1.5 text-red-500 hover:bg-red-500/10 px-3 py-2 rounded-xl transition-colors text-xs sm:text-sm font-bold border border-transparent hover:border-red-500/20"
+            >
+              <LogOut size={16} />
+              <span>خروج</span>
+            </button>
           </div>
         </header>
 

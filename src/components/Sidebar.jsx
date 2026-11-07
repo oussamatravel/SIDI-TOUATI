@@ -12,11 +12,13 @@ import {
   MessageSquare,
   FileText,
   CreditCard,
-  Download
+  Download,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const Sidebar = ({ activeTab, setActiveTab, unreadMessagesCount = 0, installPrompt, onInstallClick }) => {
+const Sidebar = ({ activeTab, setActiveTab, unreadMessagesCount = 0, installPrompt, onInstallClick, darkMode = false, setDarkMode = () => {} }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { role } = useAuth();
 
@@ -100,6 +102,28 @@ const Sidebar = ({ activeTab, setActiveTab, unreadMessagesCount = 0, installProm
           </nav>
 
           <div className="p-4 border-t text-center text-xs text-gray-400">
+            {/* Dark Mode Quick Switch */}
+            <button
+              type="button"
+              onClick={() => setDarkMode(!darkMode)}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all mb-3 border ${
+                darkMode 
+                  ? 'bg-slate-800/90 hover:bg-slate-800 text-amber-300 border-amber-500/30 shadow-sm' 
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+              }`}
+              title={darkMode ? "التبديل إلى الوضع النهاري" : "التبديل إلى الوضع الليلي الداكن"}
+            >
+              <span className="flex items-center gap-2">
+                {darkMode ? <Moon size={16} className="text-amber-400" /> : <Sun size={16} className="text-amber-600" />}
+                <span>{darkMode ? 'الوضع الليلي (مفعّل)' : 'الوضع النهاري (فاتح)'}</span>
+              </span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                darkMode ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {darkMode ? 'داكن 🌙' : 'فاتح ☀️'}
+              </span>
+            </button>
+
             <button 
               onClick={onInstallClick}
               className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-3 rounded-xl mb-4 shadow hover:shadow-lg transition-all text-sm font-bold animate-pulse"
