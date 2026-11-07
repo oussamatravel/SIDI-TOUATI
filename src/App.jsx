@@ -84,7 +84,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme_mode');
-    return saved !== 'light'; // Default to true (Dark Mode enabled)
+    return saved === 'dark'; // Normal mode by default, dark mode only on demand
   });
 
   useEffect(() => {
